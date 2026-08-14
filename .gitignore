@@ -1,0 +1,15 @@
+# Secret / machine-specific — ห้าม commit เด็ดขาด
+.env
+auth.json
+config.yaml
+state.db
+kanban.db
+*.db-wal
+*.db-shm
+logs/
+cache/
+sessions/
+memories/
+gateway.pid
+gateway.lock
+*.log
