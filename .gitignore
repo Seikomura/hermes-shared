@@ -1,15 +1,48 @@
-# Secret / machine-specific — ห้าม commit เด็ดขาด
+# ⚠️ Secret / machine-specific — ห้าม commit เด็ดขาด
+# (ไฟล์เหล่านี้มี API key / token / ข้อมูลต่อเครื่อง)
+
+# --- ไฟล์ key/token ---
 .env
+.env.*
+*.env
 auth.json
+*auth*.json
+nous_auth*
+shared/nous_auth*
+secrets*
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+*.ppk
+credentials*
+.credentials*
+
+# --- config เฉพาะเครื่อง ---
 config.yaml
+config.local.yaml
+*.local.yaml
+
+# --- state / database / cache ---
 state.db
 kanban.db
 *.db-wal
 *.db-shm
-logs/
+*.db
+models_dev_cache.json
+context_length_cache.yaml
+.update_check
 cache/
+logs/
 sessions/
 memories/
+state/
+kanban/
+cron/
+
+# --- ไฟล์ runtime ---
 gateway.pid
 gateway.lock
 *.log
+*.heartbeat
