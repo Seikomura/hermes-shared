@@ -19,6 +19,7 @@ hermes-shared/
 │   ├── home-use-work-local.ps1      #   เครื่องบ้าน: ชี้ local fallback ไป LM Studio เครื่องทำงาน
 │   ├── setup-home-machine.ps1       #   เครื่องบ้าน: ตั้งครบชุด (Nous + LM Studio port)
 │   ├── hidden-runner.vbs            #   รัน .ps1 แบบไร้หน้าต่าง (กัน terminal เด้ง)
+│   ├── check-secrets.ps1            #   สแกน secret ก่อน commit (กัน key หลุด)
 │   └── install-*.ps1                #   ลง task scheduler
 └── docs/
     ├── workthrough.md               # คู่มือแก้ปัญหาครบ (ภาษาไทย)
@@ -58,7 +59,16 @@ Copy-Item "$src\workthrough.md","$src\README.md","$src\home-machine-guide.md" "$
 Write-Host 'refresh เสร็จ — อย่าลืม git add -A && git commit && git push'
 ```
 
-## ⚠️ ข้อควรระวัง
+## 🔒 ความปลอดภัย (API key / secret)
+
+- **มี `.gitignore` กันไว้แล้ว** — ครอบคลุม `.env*`, `auth*`, `secrets*`, `*.pem/*.key`, `config.yaml`, `*.db`, `logs/`, `cache/`, `sessions/`, `memories/` ฯลฯ
+- **มี `check-secrets.ps1`** — สแกน secret pattern (Google / OpenAI / Anthropic / GitHub / Slack / AWS / JWT) ก่อน commit
+- **pre-commit hook** (รันอัตโนมัติทุก commit ที่เครื่องทำงานแล้ว) — **ต้องติดตั้งที่เครื่องบ้านด้วยหลัง clone**:
+  ```powershell
+  Copy-Item check-secrets.ps1 .git\hooks\pre-commit
+  ```
+  > หมายเหตุ: hook เป็นไฟล์ shell ที่เรียก powershell — ถ้าเครื่องบ้าน copy ตรงๆ ไม่ได้ ให้รัน `powershell -ExecutionPolicy Bypass -File check-secrets.ps1` ก่อน commit เองก็ได้
 - **ห้าม** commit: `.env`, `auth.json`, `config.yaml`, `state.db`, `kanban.db`, `logs/`, `cache/`, `sessions/`, `memories/` — มี secret/ข้อมูลต่อเครื่อง
 - สกิล builtin (68 ตัว) ไม่ต้องแชร์ — อัปเดต `hermes` ให้ version ตรงกันทั้ง 2 เครื่องก็พอ
 - หลัง pull สกิลที่เครื่องบ้าน: ตรวจว่า Hermes เห็นด้วย `hermes skills list` (ควรเห็นเป็น `local` source)
+- แนะนำ: เปิด **Secret scanning** ใน GitHub repo (Settings → Code security → Secret scanning → Enable)
