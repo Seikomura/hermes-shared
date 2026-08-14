@@ -9,14 +9,14 @@
 # วิธีใช้:
 #   powershell -ExecutionPolicy Bypass -File sync.ps1            # pull + ลงสกิล
 #   powershell -ExecutionPolicy Bypass -File sync.ps1 -SkipPull  # ไม่ pull (offline / เพิ่ง push)
-#   powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts   # ลงสกิล + สคริปต์ ops ด้วย
+#   powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts   # ลงสกิล + สคริปต์ ops + ลง Task Scheduler
 #   powershell -ExecutionPolicy Bypass -File sync.ps1 -Import    # (ฉุกเฉิน) เอา�สกิลที่แก้มือที่เครื่องนี้ กลับเข้า repo
 # ============================================================
 
 param(
     [string]$HERMES_HOME = 'C:\AI Factory',   # โฟลเดอร์ที่เก็บ config.yaml ของ Hermes
     [switch]$SkipPull,                         # ข้าม git pull
-    [switch]$Scripts,                          # ลงสคริปต์ ops ใน repo\scripts ไปที่ HERMES_HOME ด้วย
+    [switch]$Scripts,                          # ลงสคริปต์ ops (repo\scripts) + ลง Task Scheduler ด้วย
     [switch]$Import                            # เอา�สกิล local ของเครื่องนี้ กลับเข้า repo (ทิศทางกลับ)
 )
 
@@ -84,13 +84,17 @@ Get-ChildItem (Join-Path $repo 'skills') -Directory | ForEach-Object {
 }
 if ($n -eq 0) { Write-Log "  ⚠️ repo\skills ว่างเปล่า — ยังไม่มีสกิลให้ลง" }
 
-# --- 4) DEPLOY สคริปต์ (เฉพาะ -Scripts): repo\scripts -> HERMES_HOME ---
+# --- 4) DEPLOY สคริปต์ (เฉพาะ -Scripts): repo\scripts -> HERMES_HOME + ลง Task Scheduler ---
 if ($Scripts) {
     Write-Log "DEPLOY สคริปต์ -> $HERMES_HOME"
     Get-ChildItem (Join-Path $repo 'scripts') -File | ForEach-Object {
         Copy-Item $_.FullName $HERMES_HOME -Force
         Write-Log "  OK: $($_.Name)"
     }
+
+    # ลง Task Scheduler (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว, ข้าม LMStudioWatch ถ้าไม่มี LM Studio)
+    Write-Log "ลง Task Scheduler (install-tasks.ps1) ..."
+    & (Join-Path $repo 'scripts\install-tasks.ps1') -HERMES_HOME $HERMES_HOME
 }
 
 # --- 5) สรุป ---

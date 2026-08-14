@@ -22,13 +22,14 @@ repo (GitHub) = ต้นทาง
 
 ```
 hermes-shared/
-├── sync.ps1                        # ⭐ คำสั่งเดียว sync 2 เครื่อง (pull + deploy สกิล)
+├── sync.ps1                        # ⭐ คำสั่งเดียว sync 2 เครื่อง (pull + deploy สกิล + สคริปต์ + tasks)
 ├── skills/                         # สกิล local (builtin 68 ตัวมีครบอยู่แล้ว ไม่ต้องแชร์)
 │   ├── windows-service-management/SKILL.md
 │   └── productivity/hermes-workspace-setup/SKILL.md
-├── scripts/                        # สคริปต์ ops (watchdog, health-check, ฯลฯ — ลงด้วย -Scripts)
+├── scripts/                        # สคริปต์ ops (ลงเครื่องด้วย -Scripts)
+│   ├── install-tasks.ps1           #   ⭐ ลง Task Scheduler ทั้งชุด (idempotent — ข้ามตัวที่มีอยู่)
 │   ├── gateway-watch.ps1           #   watchdog gateway (HermesGatewayWatch + HermesGatewayLogonKick)
-│   ├── lmstudio-watch.ps1          #   watchdog LM Studio (LMStudioWatch)
+│   ├── lmstudio-watch.ps1          #   watchdog LM Studio (LMStudioWatch — ลงเฉพาะเครื่องที่มี LM Studio)
 │   ├── lmstudio-start.ps1          #   autostart LM Studio headless
 │   ├── health-check.ps1            #   ตรวจสุขภาพทุก 30 นาที → แจ้ง Telegram
 │   ├── fallback-watch.ps1          #   แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น
@@ -36,7 +37,7 @@ hermes-shared/
 │   ├── setup-home-machine.ps1      #   เครื่องบ้าน: ตั้งครบชุด (Nous + LM Studio port)
 │   ├── hidden-runner.vbs           #   รัน .ps1 แบบไร้หน้าต่าง (กัน terminal เด้ง)
 │   ├── check-secrets.ps1           #   สแกน secret ก่อน commit (กัน key หลุด)
-│   └── install-*.ps1               #   ลง task scheduler
+│   └── install-*.ps1               #   (ตัวเก่า) ลง task ทีละตัว
 └── docs/
     ├── workthrough.md              # คู่มือแก้ปัญหาครบ (ภาษาไทย)
     ├── README.md                   # README หลักของเครื่องทำงาน
@@ -47,17 +48,19 @@ hermes-shared/
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File sync.ps1            # pull ล่าสุด + ลงสกิล
+powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts   # + ลงสคริปต์ ops และลง Task Scheduler อัตโนมัติ
 ```
 
 | Flag | ความหมาย |
 |---|---|
 | `-SkipPull` | ข้าม `git pull` (offline / เพิ่ง push เอง) |
-| `-Scripts` | ลงสคริปต์ใน `scripts\` ไปที่ `HERMES_HOME` ด้วย (default ไม่ลง — สกิลอย่างเดียว) |
+| `-Scripts` | ลงสคริปต์ใน `scripts\` ไปที่ `HERMES_HOME` + **รัน `install-tasks.ps1` ลง Task Scheduler** (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว, ข้าม LMStudioWatch ถ้าเครื่องไม่มี LM Studio) |
 | `-Import` | **ฉุกเฉิน** — เอา�สกิลที่แก้มือที่ `HERMES_HOME\skills\` กลับเข้า repo (แล้ว commit+push เอง) |
 | `-HERMES_HOME 'C:\...'` | ถ้าเครื่องนี้เก็บ config ที่อื่น (default: `C:\AI Factory`) |
 
 > สคริปต์จะ copy แบบ **merge** — ลง/ทับเฉพาะสกิลใน repo ไม่ลบสกิล builtin หรือสกิลอื่นในเครื่อง
 > log การทำงาน: `sync.log` (อยู่ข้าง sync.ps1)
+> หมายเหตุ: `install-tasks.ps1` ใช้ได้กับ PS 5.1+ — ถ้าต้องการลง task ทีละตัวใช้ `install-healthcheck-task.ps1` / `install-fallbackwatch-task.ps1` เดิมได้
 
 ## วิธี sync จริง (ขั้นตอนปกติ)
 
@@ -74,11 +77,12 @@ git commit -m "ปรับสกิล X"
 git push
 ```
 
-### เครื่องที่บ้าน — รับของใหม่
+### เครื่องที่บ้าน — รับของใหม่ (คำสั่งเดียวครบ: pull + สกิล + สคริปต์ + tasks)
 ```powershell
 cd C:\Users\suras\hermes-shared
-powershell -ExecutionPolicy Bypass -File sync.ps1     # pull + ลงสกิล ให้ครบในคำสั่งเดียว
-hermes skills list                                    # ตรวจว่าสกิลใหม่ขึ้นแล้ว
+powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts     # pull + ลงสกิล + สคริปต์ + ลง Task Scheduler
+hermes skills list                                             # ตรวจว่าสกิลใหม่ขึ้นแล้ว
+schtasks /query /tn HermesGatewayWatch                         # ตรวจว่า watchdog ลงแล้ว
 ```
 
 ### ครั้งแรกที่เครื่องบ้าน (ติดตั้งครั้งเดียว)
@@ -91,8 +95,8 @@ git clone https://github.com/Seikomura/hermes-shared.git
 cd hermes-shared
 Copy-Item check-secrets.ps1 .git\hooks\pre-commit
 
-# 3) ลงสกิลชุดแรก
-powershell -ExecutionPolicy Bypass -File sync.ps1
+# 3) ลงสกิล + สคริปต์ + Task Scheduler ชุดเดียวกับเครื่องทำงาน (คำสั่งเดียวจบ)
+powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts
 hermes skills list
 ```
 
