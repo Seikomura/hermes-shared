@@ -10,7 +10,7 @@ elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI
 else                                                     { $HERMES_HOME = 'C:\AI Factory' }
 
 $LOG = Join-Path $HERMES_HOME 'logs\gateway-watch.log'
-$MaxHeartbeatAgeSec = 240   # heartbeat เก่าเกิน 4 นาที = gateway ตาย/ค้าง
+$MaxHeartbeatAgeSec = 900   # heartbeat เก่าเกิน 15 นาที = gateway ตาย/ค้าง (ทน Telegram หลุดช่วงสั้น ๆ ได้)
 $MaxLogLines = 300
 
 # ── เลือก task ที่ใช้ restart: HermesGateway (เครื่องทำงาน) หรือ AI_Factory_Gateway (เครื่องบ้าน) ──
