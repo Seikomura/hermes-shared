@@ -231,13 +231,13 @@ if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
 $envFile = Join-Path $HERMES_HOME '.env'
 if (Test-Path $envFile) {
     $envTxt = Get-Content $envFile -Raw
-    foreach ($k in @('GOOGLE_API_KEY', 'OPENROUTER_API_KEY', 'TELEGRAM_BOT_TOKEN')) {
-        if ($envTxt -match "(?m)^\s*$k\s*=\s*\S") {
-            Add-Check ".env: $k" 'OK' 'ตั้งค่าแล้ว (ซ่อนค่า)'
-        } else {
-            Add-Check ".env: $k" 'CRIT' "ยังไม่ตั้งค่า — ดู README.md ส่วน .env"
-        }
-    }
+    # Gemini key: ยอมรับทั้ง GEMINI_API_KEY (เครื่องบ้าน) และ GOOGLE_API_KEY (เครื่องทำงาน)
+    $gKey = if ($envTxt -match '(?m)^\s*(?:GEMINI|GOOGLE)_API_KEY\s*=\s*\S') { 'OK' } else { 'CRIT' }
+    $oKey = if ($envTxt -match '(?m)^\s*OPENROUTER_API_KEY\s*=\s*\S') { 'OK' } else { 'CRIT' }
+    $tKey = if ($envTxt -match '(?m)^\s*TELEGRAM_BOT_TOKEN\s*=\s*\S') { 'OK' } else { 'CRIT' }
+    Add-Check '.env: Gemini key' $gKey $(if ($gKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — GEMINI_API_KEY หรือ GOOGLE_API_KEY (ดู README.md ส่วน .env)' })
+    Add-Check '.env: OpenRouter' $oKey $(if ($oKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — ดู README.md ส่วน .env' })
+    Add-Check '.env: Telegram' $tKey $(if ($tKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — ดู README.md ส่วน .env' })
 } else {
     Add-Check '.env' 'CRIT' "ไม่พบไฟล์ .env ที่ $HERMES_HOME"
 }
