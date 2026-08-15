@@ -46,6 +46,7 @@
 | ตรวจอะไร | คำสั่ง (PowerShell/CMD) |
 |---|---|
 | Chain fallback ปัจจุบัน | `hermes fallback list` |
+| โมเดล orchestration ทั้ง 8 ตัว พร้อมไหม (availability + latency) | `python C:\AI_FACTORY\shared\tools\model-health-check.py` — ผ่านหมด = exit 0; 429 = rate-limit ชั่วคราว; เพิ่ม `--json` สำหรับ automation |
 | Credentials (gemini/openrouter/nous) | `hermes auth list` |
 | สถานะ Nous Portal (login/subscription) | `hermes portal info` |
 | เครื่องทำงาน LM Studio พร้อมไหม | `curl http://100.77.88.33:1234/v1/models` (ควรเห็น `qwen/qwen3.5-9b`) |

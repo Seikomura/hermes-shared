@@ -80,6 +80,7 @@ $hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.ex
 | `... publish --factory <id> --product "<slug>" [--platform youtube\|tiktok\|facebook]` | Publish (requires APPROVED; `--force` bypasses gates). |
 | `... status --product "<slug>"` | Show status, phase, review, `published[]`. |
 | `... artifacts --product "<slug>"` | List generated files. |
+| `python C:\AI_FACTORY\shared\tools\model-health-check.py` | Check availability + latency of all 8 orchestration (OpenRouter) models in the fallback chain (reads model list from `config.yaml`; exit 0 = all OK, 1 = some failed, 2 = no key). Add `--json` for automation. |
 
 ### Shopee product research (before creating)
 
