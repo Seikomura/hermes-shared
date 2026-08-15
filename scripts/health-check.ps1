@@ -7,10 +7,10 @@
     1. Heartbeat      — gateway ยัง alive ไหม (updated_at สดหรือเก่า)
     2. Process        — มี hermes.exe / python.exe (gateway) รันอยู่ไหม
     3. Gateway log    — log มีกิจกรรมล่าสุดไหม + เชื่อมต่อ Telegram หรือยัง
-    4. Fallback chain — หลัก + fallback ครบไหม (nemotron หลัก → gemini → gemma → nous → qwen3.5-9b)
+    4. Fallback chain — หลัก + fallback ครบไหม (gemini → nous → openrouter → qwen3.5-9b)
     5. LM Studio      — local AI (qwen3.5-9b) ผ่าน Tailscale IP ตอบหรือยัง
     6. Tailscale      — VPN เชื่อมต่อไหม (เครื่องบ้านต่อถึงหรือยัง)
-    7. Task Scheduler — HermesGateway เปิด auto-start (AtStartup) ไหม
+    7. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
     8. .env keys      — มี GOOGLE_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
     9. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
 
@@ -39,9 +39,19 @@ param(
 $ErrorActionPreference = 'Continue'
 $script:startTime = Get-Date
 
-# ── ค่าคงที่ของระบบ (แก้ได้ถ้าย้ายเครื่อง) ──────────────────────────
-$HERMES_HOME = 'C:\AI Factory'
-$HERMES      = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe'
+# ── ค่าคงที่ของระบบ (auto-detect — env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
+if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
+elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
+elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
+else                                                     { $HERMES_HOME = 'C:\AI Factory' }
+
+$HERMES = $null
+foreach ($c in @(
+    "$env:LOCALAPPDATA\hermes\hermes-agent\venv\Scripts\hermes.exe",
+    "$env:USERPROFILE\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe"
+)) { if ($c -and (Test-Path $c)) { $HERMES = $c; break } }
+if (-not $HERMES) { $HERMES = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe' }
+
 $LMS_IP      = '100.77.88.33'           # Tailscale IP ของเครื่องทำงาน (LM Studio qwen3.5-9b)
 $LMS_PORT    = 1234                        # port ของ LM Studio server
 $env:HERMES_HOME = $HERMES_HOME
@@ -142,22 +152,20 @@ if (Test-Path $HERMES) {
     Remove-Job $fbJob -Force -ErrorAction SilentlyContinue
 }
 if ($fb) {
-    $okNemotron = $fb -match 'nemotron'
-    $okGemini   = $fb -match 'gemini'
-    $okGemma    = $fb -match 'gemma'
-    $okNous     = $fb -match 'solar-pro4'
-    $okPhi      = $fb -match 'qwen3.5-9b'
-    $okUrl      = $fb -match '100\.77\.88\.33:1234'
-    if ($okNemotron -and $okGemini -and $okGemma -and $okNous -and $okPhi -and $okUrl) {
-        Add-Check 'Fallback chain' 'OK' 'หลัก nemotron + fallback ครบ 4 ชั้น (gemini → gemma → nous → qwen3.5-9b) + base_url ถูกต้อง'
+    $okGemini     = $fb -match 'gemini'
+    $okNous       = $fb -match 'solar-pro4'
+    $okOpenRouter = $fb -match 'nemotron'
+    $okQwen       = $fb -match 'qwen3.5-9b'
+    $okUrl        = $fb -match '100\.77\.88\.33:1234'
+    if ($okGemini -and $okNous -and $okOpenRouter -and $okQwen -and $okUrl) {
+        Add-Check 'Fallback chain' 'OK' 'หลัก gemini + fallback ครบ (nous → openrouter → qwen3.5-9b) + base_url ถูกต้อง'
     } else {
         $missing = @()
-        if (-not $okNemotron) { $missing += 'nemotron (หลัก)' }
-        if (-not $okGemini)   { $missing += 'gemini' }
-        if (-not $okGemma)    { $missing += 'gemma' }
-        if (-not $okNous)     { $missing += 'nous (solar-pro4)' }
-        if (-not $okPhi)      { $missing += 'qwen3.5-9b' }
-        if (-not $okUrl)      { $missing += 'base_url 100.77.88.33:1234' }
+        if (-not $okGemini)     { $missing += 'gemini (หลัก)' }
+        if (-not $okNous)       { $missing += 'nous (solar-pro4)' }
+        if (-not $okOpenRouter) { $missing += 'openrouter (nemotron)' }
+        if (-not $okQwen)       { $missing += 'qwen3.5-9b' }
+        if (-not $okUrl)        { $missing += 'base_url 100.77.88.33:1234' }
         Add-Check 'Fallback chain' 'WARN' ("ไม่ครบ/ผิดปกติ: ขาด {0}" -f ($missing -join ', '))
         Add-Check 'Fallback chain' 'INFO' 'รัน "hermes fallback list" เพื่อดูรายละเอียด'
     }
@@ -200,16 +208,22 @@ if (Test-Path $tsExe) {
 }
 
 # ══════════════════════ 7) TASK SCHEDULER ══════════════════════
+# รองรับทั้ง task HermesGateway (เครื่องทำงาน) และ AI_Factory_Gateway (เครื่องบ้าน)
 $taskOut = (schtasks /query /TN HermesGateway /V /FO LIST 2>&1 | Out-String)
 if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
-    Add-Check 'Auto-start task' 'CRIT' 'ไม่พบ task HermesGateway — จะไม่ start ตอนเปิดเครื่อง!'
+    $taskOut2 = (schtasks /query /TN AI_Factory_Gateway /V /FO LIST 2>&1 | Out-String)
+    if ($taskOut2 -match 'is not currently running|ERROR|ไม่พบ') {
+        Add-Check 'Auto-start task' 'CRIT' 'ไม่พบ task HermesGateway / AI_Factory_Gateway — จะไม่ start ตอนเปิดเครื่อง!'
+    } else {
+        Add-Check 'Auto-start task' 'OK' 'AI_Factory_Gateway (เครื่องบ้าน) มีอยู่ — gateway จะ start ตอน login'
+    }
 } else {
-    $atStartup = $taskOut -match 'At system start up'
+    $atStartup = $taskOut -match 'At system start up|At log on'
     $status    = if ($taskOut -match 'Status:\s+(\w+)') { $Matches[1] } else { '?' }
     if ($atStartup) {
-        Add-Check 'Auto-start task' 'OK' "AtStartup + สถานะ $status"
+        Add-Check 'Auto-start task' 'OK' "HermesGateway — trigger เปิดเครื่อง/login + สถานะ $status"
     } else {
-        Add-Check 'Auto-start task' 'WARN' "trigger ไม่ใช่ AtStartup (ตอนนี้: สถานะ $status)"
+        Add-Check 'Auto-start task' 'WARN' "HermesGateway trigger ผิดปกติ (ตอนนี้: สถานะ $status)"
     }
 }
 

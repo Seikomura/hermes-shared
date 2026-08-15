@@ -2,10 +2,24 @@
 # ถ้า heartbeat เก่าเกิน -> restart gateway ทันที กัน "bot เงียบ" ซ้ำๆ
 # รันทุก 2 นาทีผ่าน Task Scheduler: HermesGatewayWatch (wscript + hidden-runner.vbs = ไร้หน้าต่าง)
 $ErrorActionPreference = 'SilentlyContinue'
-$HERMES_HOME = 'C:\AI Factory'
-$LOG = 'C:\AI Factory\logs\gateway-watch.log'
+
+# ── auto-detect HERMES_HOME (env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
+if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
+elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
+elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
+else                                                     { $HERMES_HOME = 'C:\AI Factory' }
+
+$LOG = Join-Path $HERMES_HOME 'logs\gateway-watch.log'
 $MaxHeartbeatAgeSec = 240   # heartbeat เก่าเกิน 4 นาที = gateway ตาย/ค้าง
 $MaxLogLines = 300
+
+# ── เลือก task ที่ใช้ restart: HermesGateway (เครื่องทำงาน) หรือ AI_Factory_Gateway (เครื่องบ้าน) ──
+$RestartTask = 'HermesGateway'
+if (-not (Get-ScheduledTask -TaskName $RestartTask -ErrorAction SilentlyContinue)) {
+    if (Get-ScheduledTask -TaskName 'AI_Factory_Gateway' -ErrorAction SilentlyContinue) {
+        $RestartTask = 'AI_Factory_Gateway'
+    }
+}
 
 function Log([string]$msg) {
     $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $msg"
@@ -46,7 +60,7 @@ if ($gwProcs.Count -eq 0) {
 
 # ── 3) restart gateway ──
 # 3.1 จบ task เดิม (watcher) + ฆ่า process เก่า (เฉพาะ gateway เท่านั้น — ไม่แตะอย่างอื่น)
-schtasks /end /TN HermesGateway 2>&1 | Out-Null
+schtasks /end /TN $RestartTask 2>&1 | Out-Null
 Start-Sleep -Seconds 2
 $gw = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='hermes.exe'" |
         Where-Object { $_.CommandLine -match 'hermes' -and $_.CommandLine -match 'gateway' })
@@ -60,8 +74,8 @@ Remove-Item (Join-Path $HERMES_HOME 'gateway.pid') -Force -ErrorAction SilentlyC
 Remove-Item (Join-Path $HERMES_HOME 'gateway.lock') -Force -ErrorAction SilentlyContinue
 
 # 3.3 เริ่มใหม่ผ่าน task (รันแบบเดียวกับตอน boot — ไร้หน้าต่าง)
-schtasks /run /TN HermesGateway 2>&1 | Out-Null
-Log "WATCH: สั่ง restart ผ่าน task HermesGateway แล้ว — รอ heartbeat ใหม่ ~1 นาที"
+schtasks /run /TN $RestartTask 2>&1 | Out-Null
+Log "WATCH: สั่ง restart ผ่าน task $RestartTask แล้ว — รอ heartbeat ใหม่ ~1 นาที"
 
 # 3.4 รอ heartbeat สด (สูงสุด 90 วิ)
 $recovered = $false

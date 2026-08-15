@@ -3,8 +3,20 @@
 # รันทุก 2 นาทีผ่าน Task Scheduler: LMStudioWatch (wscript + hidden-runner.vbs = ไร้หน้าต่าง)
 $ErrorActionPreference = 'SilentlyContinue'
 $LMS = "$env:USERPROFILE\.lmstudio\bin\lms.exe"
-$LOG = 'C:\AI Factory\logs\lmstudio.log'
+
+# ── auto-detect HERMES_HOME (env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
+if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
+elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
+elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
+else                                                     { $HERMES_HOME = 'C:\AI Factory' }
+
+$LOG = Join-Path $HERMES_HOME 'logs\lmstudio.log'
+
+# ── เลือกโมเดลอัตโนมัติ: เครื่องทำงาน=qwen3.5-9b / เครื่องบ้าน=qwen3-1.7b ──
 $Model = 'qwen/qwen3.5-9b'
+$installed = (& $LMS ls 2>&1 | Out-String)
+if ($installed -notmatch 'qwen3\.5-9b') { $Model = 'qwen/qwen3-1.7b' }
+
 $MaxLogLines = 300   # กัน log โตเกิน (watchdog รันทุก 2 นาที)
 
 function Log([string]$msg) {
@@ -35,10 +47,10 @@ if ($srv -notmatch 'running') {
 # 3) โมเดลต้องโหลดอยู่ใน memory (ถ้าหาย = ข้อความแรกจะช้า -> โหลดใหม่ทันที)
 # โหลดใช้เวลา ~20-30 วิ ดังนั้นรอ 35 วิก่อนเช็คว่าสำเร็จ (ไม่งั้นจะสรุปผิดว่าโหลดไม่สำเร็จ)
 $loaded = (& $LMS ps 2>&1 | Out-String)
-if ($loaded -notmatch 'qwen/qwen3.5-9b') {
+if ($loaded -notmatch [regex]::Escape($Model)) {
     Log "WATCH: โมเดล $Model ไม่อยู่ใน memory -> โหลดใหม่ (64K context)"
     & $LMS load $Model -c 65536 2>&1 | Out-Null
     Start-Sleep -Seconds 35
     $chk = (& $LMS ps 2>&1 | Out-String)
-    if ($chk -match 'qwen/qwen3.5-9b') { Log "WATCH: โหลดสำเร็จ" } else { Log "WATCH: โหลดยังไม่สำเร็จ (รอบหน้าจะลองใหม่)" }
+    if ($chk -match [regex]::Escape($Model)) { Log "WATCH: โหลดสำเร็จ" } else { Log "WATCH: โหลดยังไม่สำเร็จ (รอบหน้าจะลองใหม่)" }
 }

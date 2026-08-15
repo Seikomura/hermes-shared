@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   ตรวจ logs\agent.log หาเหตุการณ์ "Fallback activated: X → Y" ทุกชั้น
-  (gemini → gemma → nous → qwen3.5-9b/LM Studio) แล้วส่งแจ้งเตือนไป Telegram
+  (gemini → nous → openrouter → qwen3.5-9b/LM Studio) แล้วส่งแจ้งเตือนไป Telegram
 
   แจ้งแบบ cooldown (กันสแปม): แจ้งครั้งเดียว แล้วเงียบภายในระยะเวลา
   ที่กำหนด (ค่าเริ่มต้น 60 นาที) — ถ้า Gemini quota หมดทั้งวัน จะได้
@@ -35,8 +35,12 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-# ── ค่าคงที่ของระบบ ──────────────────────────────────────────────
-$HERMES_HOME = 'C:\AI Factory'
+# ── ค่าคงที่ของระบบ (auto-detect — env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
+if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
+elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
+elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
+else                                                     { $HERMES_HOME = 'C:\AI Factory' }
+
 $LOG_FILE    = Join-Path $HERMES_HOME 'logs\agent.log'
 $STATE_FILE  = Join-Path $HERMES_HOME 'state\fallback-watch.offset'
 $LAST_FILE   = Join-Path $HERMES_HOME 'state\fallback-watch.last'
@@ -98,9 +102,9 @@ $found = @()
 if ($TestSend) {
     $found = @(
         '[TEST] Fallback activated: nvidia/nemotron-3-super-120b-a12b:free → gemini-3.6-flash (gemini)',
-        '[TEST] Fallback activated: gemini-3.6-flash → google/gemma-4-31b-it:free (openrouter)',
-        '[TEST] Fallback activated: google/gemma-4-31b-it:free → upstage/solar-pro4:free (nous)',
-        '[TEST] Fallback activated: upstage/solar-pro4:free → qwen/qwen3.5-9b (custom)'
+        '[TEST] Fallback activated: gemini-3.6-flash → upstage/solar-pro4:free (nous)',
+        '[TEST] Fallback activated: upstage/solar-pro4:free → tencent/hy3:free (nous)',
+        '[TEST] Fallback activated: tencent/hy3:free → qwen/qwen3.5-9b (custom)'
     )
 } elseif ($newText) {
     $found = @($newText -split "`r?`n" | Where-Object { $_ -match $FALLBACK_PATTERN })
