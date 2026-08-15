@@ -1,0 +1,850 @@
+# AI FACTORY — คู่มือการใช้งาน (Workthrough)
+
+> อัปเดตล่าสุด: 14 สิงหาคม 2026 (v3 — fallback chain 8 ระดับ: Nous Portal ฟรี + LM Studio เครื่องทำงาน/เครื่องนี้; docs ตรงกับ config.yaml)
+> เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
+
+---
+
+## สารบัญ
+
+1. [โปรเจกต์นี้คืออะไร](#1-โปรเจกต์นี้คืออะไร)
+2. [สถาปัตยกรรมระบบและสถานะ](#2-สถาปัตยกรรมระบบและสถานะ)
+3. [โครงสร้างโฟลเดอร์](#3-โครงสร้างโฟลเดอร์)
+4. [สิ่งที่ต้องเตรียมก่อนเริ่ม](#4-สิ่งที่ต้องเตรียมก่อนเริ่ม)
+5. [การตั้งค่า (Setup)](#5-การตั้งค่า-setup)
+6. [คำสั่งที่ใช้ประจำ](#6-คำสั่งที่ใช้ประจำ)
+7. [การใช้งานผ่าน Telegram Bot](#7-การใช้งานผ่าน-telegram-bot)
+8. [รายละเอียดแต่ละ Factory](#8-รายละเอียดแต่ละ-factory)
+9. [เส้นทางข้อมูลและ Artifact](#9-เส้นทางข้อมูลและ-artifact)
+10. [การดู Log และตรวจสอบระบบ](#10-การดู-log-และตรวจสอบระบบ)
+11. [สถานะปัจจุบันและแผนพัฒนา](#11-สถานะปัจจุบันและแผนพัฒนา)
+12. [ข้อควรระวังด้านความปลอดภัย](#12-ข้อควรระวังด้านความปลอดภัย)
+13. [การแก้ปัญหาเบื้องต้น (Troubleshooting)](#13-การแก้ปัญหาเบื้องต้น-troubleshooting)
+14. [Changelog](#14-changelog)
+
+---
+
+## 1. โปรเจกต์นี้คืออะไร
+
+**AI FACTORY** คือระบบ "โรงงานผลิตคอนเทนต์" ที่ทำงานบน Windows โดยใช้ **Hermes Agent** (AI assistant จาก Nous Research) ทำหน้าที่เป็น **Factory Manager** คอยสร้างและจัดการ workspace ของสินค้าแต่ละชิ้นอย่างเป็นระบบ
+
+หลักการทำงาน: ผู้ใช้สั่งงาน (ผ่าน Terminal หรือ Telegram) → Hermes เรียก `factory_manager.py` → สร้างโฟลเดอร์ Product แยกส่วน → รัน workflow ตาม **2 เฟส** (build draft ก่อน แล้วค่อย publish หลังผ่านรีวิว)
+
+ปัจจุบันมี **2 โรงงาน**:
+
+| Factory ID | ชื่อ | สายการผลิต |
+|---|---|---|
+| `shopee_affiliate` | Shopee Affiliate | วิจัยสินค้า → เลือกสินค้า → เขียนสคริปต์ → สร้างภาพ/Asset → ทำวิดีโอ → เขียน Caption → **รีวิว** → โพสต์ YouTube/TikTok/Facebook |
+| `ebook` | E-book | วิจัย → ทำโครงเรื่อง → เขียนบท → แก้ไข → ตรวจสอบข้อเท็จจริง → สร้างภาพ/ปก → ทำ EPUB → ทำ PDF → **รีวิว** → เผยแพร่ |
+
+> **สถานะสำคัญ:** วิดีโอโปรโมต / สคริปต์ / เสียงพากย์ **ทำจริงแล้ว (ฟรี 100%** — ffmpeg + edge-tts ที่เครื่อง); ยังเป็น placeholder เฉพาะส่วนที่ต้องต่อ API จริง: ค้นสินค้า Shopee (รอ keys), การโพสต์โซเชียลมีเดีย, EPUB/PDF ดูรายละเอียดใน [หัวข้อ 11](#11-สถานะปัจจุบันและแผนพัฒนา)
+
+---
+
+## 2. สถาปัตยกรรมระบบและสถานะ
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     ผู้ใช้ (คุณ)                          │
+│     PowerShell Terminal  หรือ  Telegram Bot             │
+└──────────────┬──────────────────────────┬───────────────┘
+               │                          │
+               ▼                          ▼
+   ┌────────────────────┐      ┌───────────────────────┐
+   │  Hermes Agent      │      │  Hermes Telegram      │
+   │  (interactive CLI) │      │  Gateway (long-poll)  │
+   └──────────┬─────────┘      └───────────┬───────────┘
+              │                            │
+              │  อ่าน skill: ai-factory     │  ปุ่มยืนยัน = clarify tool
+              ▼                            ▼
+   ┌──────────────────────────────────────────────────────┐
+   │        shared/tools/factory_manager.py (CLI)         │
+   │   list  create  test  build  review  publish         │
+   │   status  artifacts                                  │
+   └──────────┬───────────────────────┬──────────────────┘
+              │                       │
+              ▼                       ▼
+   ┌─────────────────────┐   ┌──────────────────────────┐
+   │  factories/<id>/    │   │  products/<slug>/        │
+   │  config/factory.json│   │  (workspace ของสินค้า)    │
+   │  workflows/*.json   │   │  metadata/product.json   │
+   │  .env (keys)        │   │  + logs/ สำหรับบันทึก     │
+   └─────────────────────┘   └──────────────────────────┘
+```
+
+**หลักการออกแบบที่สำคัญ:**
+- `factory_manager.py` **ไม่มี logic แบบ if/else เฉพาะโรงงาน** — มันอ่านโครงสร้างจาก `factories/<factory-id>/config/factory.json` (stages, phases, publish_platforms) แล้วทำงานตามนั้น → การเพิ่มโรงงานใหม่ทำได้โดยเพิ่มโฟลเดอร์ config + workflow เท่านั้น
+- ทุกอย่างที่ผลิต (artifact) ต้องอยู่ภายใน `products/<slug>/` เท่านั้น
+- Keys/ความลับทั้งหมดอยู่ในไฟล์ `.env` ซึ่งถูก Git ignore
+
+### 2.1 สถานะของ Product (State machine)
+
+`metadata/product.json` เก็บ `status`, `phase`, `review`, `published`:
+
+```
+สร้าง (create)           build                 review approve        publish
+CREATED ────────────→ DRAFT_READY ─────────→ APPROVED ──────────→ PUBLISHED
+   │        (phase: build)      │              │      (phase: publish,
+   │                            │              │       published: [platforms])
+   │                            └→ review reject
+   │                                REJECTED ──→ (แก้ไขแล้ว) build ใหม่
+   └─ ทุกขั้นตอนถ้า error ─→ FAILED (ดู logs/workflow.json)
+
+หมายเหตุ:
+- phase: '' → 'build' → 'publish'  (บ่งชี้เฟสปัจจุบัน)
+- review.status: pending / approved / rejected  (build ใหม่จะรีเซ็ตเป็น pending)
+- published: รายชื่อแพลตฟอร์มที่โพสต์แล้ว (youtube, tiktok, facebook, publishing)
+```
+
+**กติกา (Review gate):** `publish` จะทำงานได้ก็ต่อเมื่อ `review.status == approved` **และ** มี draft (phase = build/publish) เท่านั้น — `--force` เป็นทาง bypass (ต้อง user สั่งชัดเจน)
+
+---
+
+## 3. โครงสร้างโฟลเดอร์
+
+```
+C:\AI_FACTORY
+├── factories\                          # นิยามของโรงงานแต่ละแห่ง
+│   ├── shopee_affiliate\
+│   │   ├── config\
+│   │   │   ├── factory.json            # โครงสร้างโฟลเดอร์ + stages + phases + publish_platforms
+│   │   │   └── integrations.example.json
+│   │   ├── workflows\
+│   │   │   ├── test.json               # workflow ทดสอบพื้นฐาน
+│   │   │   ├── build.json              # เฟส build (draft) — stage video เรียก video_builder.py
+│   │   │   ├── publish-youtube.json    # เฟส publish แยกตามแพลตฟอร์ม
+│   │   │   ├── publish-tiktok.json
+│   │   │   └── publish-facebook.json
+│   │   ├── .env.example
+│   │   └── README.md
+│   └── ebook\
+│       ├── config\factory.json
+│       ├── workflows\
+│       │   ├── test.json
+│       │   ├── build.json
+│       │   └── publish.json            # ebook: publish แบบขั้นเดียว (ไม่มี --platform)
+│       ├── .env.example
+│       └── README.md
+├── products\                           # workspace ของสินค้าแต่ละชิ้น (สร้างโดย CLI)
+│   └── <product-slug>\
+│       ├── research\ outline\ scripts\ images\ ...  # ตาม factory.json
+│       ├── metadata\
+│       │   ├── product.json            # ชื่อ, สถานะ, phase, review, published, jobs, artifacts
+│       │   └── workflow_manifest.json  # stages + phases + จุดอ้างอิง integration config
+│       ├── scripts\                    # สคริปต์เฉพาะสินค้า
+│       └── logs\workflow.json          # ผลรันครั้งล่าสุด
+├── shared\
+│   ├── tools\factory_manager.py        # ตัวจัดการโรงงาน (CLI)
+│   ├── tools\script_writer.py          # เขียนสคริปต์โปรโมตจริง (สรรพคุณ/ราคา/โปรโมชัน)
+│   ├── tools\shopee_research.py        # ค้นสินค้า Shopee: extra commission + ความนิยมสูง (ต้องมี keys)
+│   ├── tools\video_builder.py          # ประกอบวิดีโอ + voiceover (ffmpeg + edge-tts, ฟรี 100%)
+│   └── hermes_home\                    # บ้านของ Hermes Agent
+│       ├── config.yaml                 # ตั้งค่า model + fallback chain (Gemini/Nous/OpenRouter/local)
+│       ├── SOUL.md                     # บุคลิก/บทบาทของ Hermes
+│       ├── .env                        # GEMINI_API_KEY, OPENROUTER_API_KEY, TELEGRAM_*
+│       ├── skills\ai-factory\SKILL.md  # skill สั่งงานผ่าน Hermes (v1.14.0: research/ปุ่มยืนยัน/วิดีโอฟรี)
+│       ├── channel_directory.json      # รายชื่อผู้ใช้ Telegram ที่คุยได้
+│       ├── gateway_state.json          # สถานะของ Telegram Gateway
+│       ├── logs\gateway.log            # log ของ Gateway
+│       ├── logs\watchdog.log           # log การ restart อัตโนมัติ (watchdog)
+│       ├── logs\notify.log             # ผลการส่งแจ้งเตือน Telegram (watchdog_notify.py)
+│       └── logs\.watchdog_notify_state.json   # สถานะ notify: บรรทัด watchdog.log ที่ส่งแล้ว
+├── logs\                               # logs ระดับโปรเจกต์
+│   ├── products\products.jsonl         # ประวัติการสร้างสินค้า + review
+│   ├── factories\factories.jsonl       # ประวัติการรัน workflow สำเร็จ
+│   └── errors\errors.jsonl             # ประวัติ error
+└── Workthrough.md                      # เอกสารนี้
+```
+
+---
+
+## 4. สิ่งที่ต้องเตรียมก่อนเริ่ม
+
+| รายการ | รายละเอียด |
+|---|---|
+| **Windows** | ระบบออกแบบมาให้รันบน Windows native |
+| **Python** | สำหรับรัน `factory_manager.py` (ใช้ stdlib เท่านั้น ไม่ต้องติดตั้ง package เพิ่ม) |
+| **Hermes Agent** | ติดตั้งอยู่ที่ `C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe` |
+| **ffmpeg** (ฟรี) | สำหรับประกอบวิดีโอโปรโมต — ติดตั้ง: `winget install Gyan.FFmpeg` (ตรวจ: `ffmpeg -version`) |
+| **edge-tts** *(optional, ฟรี)* | voiceover (Microsoft TTS) — ติดตั้ง: `pip install edge-tts` (ต้องมีอินเทอร์เน็ต; ถ้าไม่มีวิดีโอจะไม่มีเสียงพากย์แต่ยังทำงานได้) |
+| **OpenRouter API Key** | ใส่ใน `shared\hermes_home\.env` (ตัวหลัก `OPENROUTER_API_KEY`) |
+| **Nous Portal (ฟรี)** | Login OAuth ครั้งเดียวด้วย `hermes auth add nous` — ใช้เป็น fallback ชั้น ②③④ (โมเดลฟรี `:free` ใน subscription) |
+| **Telegram Bot Token** *(optional)* | ใส่ใน `shared\hermes_home\.env` ถ้าจะใช้ bot |
+| **Keys เฉพาะโรงงาน** *(optional)* | ใส่ใน `factories\<id>\.env` เฉพาะที่จำเป็น |
+
+> **Model 8 ระดับ** (ดู/แก้ใน `shared\hermes_home\config.yaml`): ① **Gemini** `gemini-3.6-flash` (primary — ใส่ `GEMINI_API_KEY` ใน `shared\hermes_home\.env`; ยังไม่ใส่ Hermes จะข้ามไประดับถัดไปอัตโนมัติ) → ② **Nous Portal ฟรี** `upstage/solar-pro4:free` (524K context — เหมาะงานยาว) → ③ **Nous Portal ฟรี** `tencent/hy3:free` (295B MoE, 262K, agentic) → ④ **Nous Portal ฟรี** `stepfun/step-3.7-flash:free` (multimodal) → ⑤ **OpenRouter ฟรี** `nvidia/nemotron-3-ultra-550b-a55b:free` (1M context) → ⑥ **OpenRouter ฟรี** `nvidia/nemotron-3-super-120b-a12b:free` → ⑦ **LM Studio เครื่องทำงาน** `qwen/qwen3.5-9b` (`provider: custom` + `base_url: http://100.77.88.33:1234/v1` — ผ่าน Tailscale; ต้องเปิด LM Studio server บนเครื่องทำงานก่อน: `work-lmstudio-autostart.ps1`) → ⑧ **LM Studio เครื่องนี้** `qwen/qwen3-1.7b` (`base_url: http://127.0.0.1:1234/v1`) — ตรวจสอบรายชื่อโมเดลได้ที่ [OpenRouter models](https://openrouter.ai/api/v1/models) / Nous: `inference-api.nousresearch.com/v1/models` ก่อนเปลี่ยน
+>
+> **หมายเหตุ ⑦ LM Studio เครื่องทำงาน — `qwen/qwen3.5-9b`:** ผ่าน Tailscale ที่ `100.77.88.33:1234` (เดิมเป็น Ollama `qwen3:8b` ที่ `:11434` — ย้ายมาใช้ LM Studio แล้ว) — ⚠️ **ต้องใช้ `provider: custom`** + ระบุ `base_url` ตรงๆ (fallback path ของ Hermes **ไม่รู้จัก `provider: ollama`** — จะ error `Fallback to ollama failed: provider not configured`; แต่ `custom` + `base_url` ทำงานได้ — ทดสอบแล้ว ตอบจริง ~28s) และตั้ง `context_length: 65536` ใน `custom_providers` ต่อโมเดล (ผ่านเกณฑ์ 64K ของ Hermes) — `auxiliary.compression` ใช้ **OpenRouter ฟรี** แทน (งานบีบอัด context ต้อง ≥64K) — เปิด server อัตโนมัติตอน login ที่เครื่องทำงาน: `shared\tools\work-lmstudio-autostart.ps1`
+> - **⚠️ สำคัญ — หลังรีสตาร์ท LM Studio (⑧):** โมเดลจะโหลดกลับที่ context **8192 (ค่า default)** ไม่ใช่ 32K → ต้องโหลดใหม่ด้วย 32K ก่อนใช้เป็น fallback ไม่งั้น Hermes จะเจอ `Context length exceeded` สำหรับ prompt ยาว — **วิธีที่เร็วที่สุด (ใช้ `lms` CLI ที่มากับ LM Studio):** `lms load qwen/qwen3-1.7b -c 32768 -y` (ตรวจผลด้วย `lms ps`) หรือเปิด LM Studio GUI → คลิกโมเดล → ตั้ง Context Length = 32768 → โหลดใหม่ (ค่านี้จำต่อโมเดล)
+> - **ℹ️ เวอร์ชัน LM Studio:** 0.4.20 คือ **เวอร์ชันล่าสุด** (ตรวจแล้ว: เว็บ lmstudio.ai + winget ตรงกัน ณ ส.ค. 2026 — ไม่มีเวอร์ชันใหม่กว่า); API ของ 0.4.20 **ยังไม่รองรับการปิด reasoning ผ่านคำสั่ง** (ต้องปิดใน GUI: คลิกโมเดล → Reasoning: off → โหลดใหม่)
+
+---
+
+## 5. การตั้งค่า (Setup)
+
+### 5.1 สร้างไฟล์ .env
+
+คัดลอกจากตัวอย่าง แล้วกรอกค่าที่มี:
+
+```powershell
+# 1) สำหรับ Hermes (ตัวหลัก)
+Copy-Item C:\AI_FACTORY\shared\hermes_home\.env.example C:\AI_FACTORY\shared\hermes_home\.env
+# เปิดแก้ไข ใส่ OPENROUTER_API_KEY, GEMINI_API_KEY (ถ้ามี), TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS
+
+# 2) สำหรับแต่ละโรงงาน (เฉพาะที่จำเป็น)
+Copy-Item C:\AI_FACTORY\factories\shopee_affiliate\.env.example C:\AI_FACTORY\factories\shopee_affiliate\.env
+Copy-Item C:\AI_FACTORY\factories\ebook\.env.example C:\AI_FACTORY\factories\ebook\.env
+```
+
+### 5.2 ตั้งค่า environment variables (ทุกครั้งที่เปิด PowerShell ใหม่)
+
+```powershell
+$env:HERMES_HOME='C:\AI_FACTORY\shared\hermes_home'
+$env:AI_FACTORY_ROOT='C:\AI_FACTORY'
+$hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe'
+```
+
+อธิบาย:
+- `HERMES_HOME` → บอก Hermes ว่า config, keys, skills, logs อยู่ที่ไหน
+- `AI_FACTORY_ROOT` → ระบุ workspace ของโรงงาน
+- `$hermes` → ตัวแปรย่อของ path executable (ต้องตั้งใหม่ทุกหน้าต่าง PowerShell)
+
+> 💡 แนะนำ: ถ้าขี้เกียจพิมพ์ซ้ำ เก็บ 3 บรรทัดนี้ไว้ใน PowerShell Profile หรือไฟล์ `.ps1` แล้ว `.` source ตอนเปิด
+
+### 5.3 ตั้งค่า Gemini API (เมื่อได้ key แล้ว) — model ระดับ ①
+
+`config.yaml` ตั้งเป็น **8 ระดับ** ไว้แล้ว (`gemini-3.6-flash` → Nous Portal ฟรี × 3 → OpenRouter ฟรี × 2 → LM Studio เครื่องทำงาน → LM Studio เครื่องนี้) — เหลือแค่ใส่ key:
+
+1. เปิดไฟล์ `C:\AI_FACTORY\shared\hermes_home\.env` แล้วเพิ่มบรรทัด (key จาก https://aistudio.google.com/apikey):
+   ```
+   GEMINI_API_KEY=AIza...
+   ```
+2. บันทึก แล้ว**รีสตาร์ท Hermes / Gateway** (เพื่อโหลด .env ใหม่)
+
+**วิธีเช็คว่า Hermes ใช้ Gemini จริงไหม:**
+
+- **วิธี A (แม่นสุด):** เปิด `& $hermes` แล้วดูบรรทัดแรกตอนเริ่ม session:
+  - `🤖 AI Agent initialized with model: gemini-3.6-flash` → ✅ ใช้ Gemini
+  - `🔄 Fallback model: nvidia/... (openrouter)` → ยังไม่ได้ใช้ Gemini (ดู troubleshooting ข้อ 13)
+- **วิธี B:** พิมพ์ `/status` ใน session → บรรทัด `Model: gemini-3.6-flash (gemini)` → ✅ (ถ้าขึ้น `(openrouter)` = ใช้ตัวสำรองอยู่)
+
+**ถ้า `gemini-3.6-flash` ใช้ไม่ได้ (error 404 / model not found):**
+
+- แก้ `shared\hermes_home\config.yaml` เปลี่ยน `default` เป็นตัวอื่นที่มีในโค้ด Hermes: `gemini-2.5-flash` / `gemini-3-flash` / `gemini-3.1-flash-lite-preview`
+- หรือรันตัวช่วยเลือกแบบโต้ตอบ (เขียน config ให้อัตโนมัติ): `& $hermes model`
+- ไม่ต้องแก้ก็ได้ — Hermes จะข้ามไปใช้ fallback ฟรี (Nous Portal → OpenRouter) อัตโนมัติ (ไม่พัง)
+
+> **ยังไม่ใส่ `GEMINI_API_KEY` (ช่วงก่อนได้ key):**
+> - เปิด Hermes โหมดคุยปกติครั้งแรก จะขึ้นข้อความ `⚕ No inference provider is configured yet` + ถาม `Set up a provider now? [Y/n]` — **พิมพ์ `n` ข้ามไปได้** ระบบยังทำงานปกติผ่าน OpenRouter ฟรี (ตรวจแล้ว: `hermes chat` ตอบได้จริงผ่าน fallback) พอใส่ key แล้วข้อความนี้จะไม่ขึ้นอีก
+> - คำสั่ง `-z/--oneshot` (script/pipeline) **จะ error `No usable credentials found for provider 'gemini'`** เพราะโหมดนี้ไม่ผ่าน fallback chain — ใช้กับ config ที่มี key แล้ว หรือ override ได้ดังนี้: `& $hermes -z "<prompt>" --provider openrouter -m "nvidia/nemotron-3-ultra-550b-a55b:free"`
+> - โมเดล `:free` บน OpenRouter อาจเจอ `HTTP 402 ... can only afford N tokens` (ฟรีเครดิตจำกัดต่อ request) — คำตอบหลักยังได้ แต่ขั้นเสริมอย่าง title generation อาจล้มได้ ไม่ใช่ความผิด config
+
+---
+
+## 6. คำสั่งที่ใช้ประจำ
+
+> ใช้สัญลักษณ์ `...` = `python C:\AI_FACTORY\shared\tools\factory_manager.py` เพื่อความกระชับ
+
+### 6.1 เริ่ม Hermes (โหมดคุยใน Terminal)
+
+```powershell
+& $hermes
+```
+
+- เปิด session แบบคุยโต้ตอบ ใช้ `/exit` หรือ Ctrl+C เพื่อออก
+- **ต้องรีสตาร์ท Hermes ทุกครั้ง** หลังแก้ skill หรือ config เพื่อให้โหลดการเปลี่ยนแปลง
+
+### 6.2 เริ่ม Telegram Gateway
+
+**วิธี A — อัตโนมัติตอนเข้าสู่ระบบ (แนะนำ ✅ ตั้งไว้แล้ว):**
+
+Task Scheduler ลงทะเบียนทาสก์ `AI_Factory_Gateway` ไว้แล้ว → **ทุกครั้งที่ login Windows, Gateway จะรันอัตโนมัติ** แบบหน้าต่างเงียบ (ผ่าน `wscript.exe` → `shared\tools\start_gateway_hidden.vbs` → `start_gateway.bat`):
+
+```powershell
+schtasks /Query /TN "AI_Factory_Gateway" /V /FO LIST   # ตรวจว่าทาสก์ติดตั้งอยู่
+schtasks /Run   /TN "AI_Factory_Gateway"               # รันทาสก์ทันที (ไม่ต้องรอ login)
+shared\tools\stop_gateway.bat                          # หยุด Gateway แบบสะอาด (ดูด้านล่าง)
+schtasks /Delete /TN "AI_Factory_Gateway" /F           # (ถ้าต้องการ) ลบทาสก์
+```
+
+- ไฟล์ที่เกี่ยวข้อง: `shared\tools\start_gateway.bat` (ตั้ง env + รัน `hermes gateway` + **guard กันรันซ้ำ** เช็ค PID ใน `state\gateway.lifecycle.json` + **watchdog**: ถ้า Gateway ตาย/โดนฆ่า จะรอ ~10 วิ แล้วรันใหม่เอง + เช็ค stop marker), `shared\tools\start_gateway_hidden.vbs` (ซ่อนหน้าต่าง + **รอ** bat ทำงาน แล้วส่งต่อ exit code), `shared\tools\register_gateway_task.ps1` (สคริปต์ลงทะเบียนทาสก์), `shared\tools\stop_gateway.bat` (หยุด Gateway แบบสะอาด), `shared\tools\watchdog_notify.py` (แจ้งเตือน Telegram เมื่อ Gateway restart)
+- **Auto-restart มี 2 ชั้น:** ① **watchdog ใน bat (หลัก)** — Gateway ตาย/ถูกฆ่าเมื่อไหร่ รีรันเอง (~30 วิ กลับมา `connected`; **ทดสอบแล้ว**) + บันทึกทุก restart ลง `logs\watchdog.log` + **กัน crash loop**: ถ้า Gateway ตายภายใน 60 วิหลังสตาร์ทซ้ำกัน 6 ครั้งติด (เช่น config พัง) จะหยุดรอ (exit 1) ให้ user ดู log แก้ไข ② **Task Scheduler restart-on-failure (สำรอง)** — 3 ครั้ง ห่างกัน 1 นาที ใช้เมื่อ watchdog ตัวมันเองถูกฆ่า — ⚠️ หมายเหตุ: restart-on-failure ของ Task Scheduler **ใช้ไม่ได้กับการรันแบบ manual** (`schtasks /Run` — ทดสอบแล้ว: ทาสก์บันทึก failure (Last Result 1) แต่ไม่ restart) ใช้ได้เฉพาะตอน login trigger เริ่มทาสก์เอง; เพราะฉะนั้น watchdog จึงเป็นกลไกหลักที่การันตีการกู้คืน
+- **แจ้งเตือน Telegram เมื่อ Gateway restart:** ทุกครั้งที่ watchdog เขียน log restart → `watchdog_notify.py` ส่งข้อความ ⚠️ ไปยัง `TELEGRAM_ALLOWED_USERS` (อ่าน `logs\watchdog.log` + ส่งเฉพาะบรรทัดใหม่ ผ่านสถานะ `logs\.watchdog_notify_state.json`; ผลการส่งอยู่ที่ `logs\notify.log`; ข้ามบรรทัด "stop requested" อัตโนมัติ) — **ทดสอบแล้ว**: ฆ่า Gateway แล้วได้รับแจ้งเตือนจริง; ถ้า crash loop ครบ 6 ครั้ง จะได้แจ้งเตือน "giving up" ด้วย
+- **หยุด Gateway แบบสะอาด:** ⚠️ `schtasks /End` อย่างเดียว **ไม่พอ** (watchdog จะ restart กลับมาเอง) → ใช้ `shared\tools\stop_gateway.bat` (เขียน stop marker + ฆ่า process + /End) — ทดสอบแล้ว: หยุดแล้วอยู่หยุดจริง (ไม่กลับมาเอง) และเริ่มใหม่ได้ด้วย `schtasks /Run`
+- ตรวจว่า Gateway รันอยู่: `gateway_state.json` ขึ้น `running` + `telegram.connected` (ดูหัวข้อ 10.2)
+
+**วิธี B — รันแบบ foreground (manual):**
+
+```powershell
+& $hermes gateway
+```
+
+- เปิด Telegram long-polling แบบ foreground **ต้องเปิดหน้าต่างนี้ค้างไว้** ตลอดการใช้งาน bot
+- ถ้าต่อสำเร็จ จะเห็นข้อความ `telegram connected` และ `Gateway running with 1 platform(s)` ใน `shared\hermes_home\logs\gateway.log`
+- หยุดด้วย Ctrl+C
+
+### 6.3 ดูรายชื่อ Factory ที่ลงทะเบียน
+
+```powershell
+... list
+```
+
+แสดง Factory ID, โครงสร้างโฟลเดอร์, stages, phases และ publish_platforms
+
+### 6.4 สร้าง Product workspace
+
+```powershell
+... create --factory shopee_affiliate --name "My Product"
+```
+
+- สร้างโฟลเดอร์ Windows-safe ใต้ `C:\AI_FACTORY\products\` (อักขระพิเศษ/ช่องว่าง เปลี่ยนเป็น `-`)
+- สร้างครบทุกโฟลเดอร์ตาม `factory.json` + `metadata/product.json` (สถานะ `CREATED`, review `pending`) + `metadata/workflow_manifest.json` + `scripts/`
+- สร้างหนังสือใช้ `--factory ebook`
+- ผลลัพธ์ JSON มี `slug` (ชื่อโฟลเดอร์) และ `status: CREATED`
+
+### 6.5 รัน test workflow (ทดสอบพื้นฐาน)
+
+```powershell
+... test --factory shopee_affiliate --product "My-Product"
+... test --factory ebook --product "Failure-Test" --fail   # ตัวเลือก --fail: ทำให้ stage แรกพังตั้งใจ
+```
+
+- เขียนไฟล์ placeholder ตาม workflow test เท่านั้น ไม่เรียก API จริง
+- สำเร็จ → `status: READY` / ล้มเหลว → `status: FAILED` (ตรวจสอบ `products\<slug>\logs\workflow.json`)
+
+### 6.6 เฟส build (สร้าง draft)
+
+```powershell
+... build --factory shopee_affiliate --product "My-Product"
+```
+
+- รัน workflow เฟส build (research → selection → script → assets → video → captions / หนังสือ: research → ... → pdf)
+- สำเร็จ → `status: DRAFT_READY`, `phase: build`, **รีเซ็ต review เป็น pending อัตโนมัติ**
+- stage `script`/`video` **ทำของจริงแล้ว** (สคริปต์โปรโมต + วิดีโอ ffmpeg พร้อมเสียงพากย์จากสคริปต์); stage อื่น (research/selection/assets/captions ฯลฯ) ยังเป็น placeholder จนกว่าจะต่อ API จริง
+
+### 6.7 รีวิว (Review gate)
+
+```powershell
+... review --product "My-Product" --status approve [--notes "..."]
+... review --product "My-Product" --status reject [--notes "..."]
+```
+
+- `approve` → `status: APPROVED` (ทำได้เฉพาะเมื่อ draft พร้อม: DRAFT_READY/REJECTED — สินค้าที่ยังไม่ build อนุมัติไม่ได้)
+- `reject` → `status: REJECTED` บันทึก `notes` ไว้ แล้ว user แก้ไข → build ใหม่
+
+### 6.8 เฟส publish (โพสต์) — แยกตามแพลตฟอร์ม
+
+```powershell
+... publish --factory shopee_affiliate --product "My-Product" --platform youtube   # โพสต์แค่ YouTube
+... publish --factory shopee_affiliate --product "My-Product"                     # โพสต์แพลตฟอร์มที่ยังไม่ได้โพสต์ทั้งหมด
+... publish --factory ebook --product "My-Book"                                   # ebook: ขั้นเดียว (ไม่มี --platform)
+```
+
+- **Gate:** ต้อง `review.status == approved` + มี draft ก่อน ไม่งั้นปฏิเสธ (`ok: false`)
+- โพสต์ซ้ำแพลตฟอร์มเดิม / แพลตฟอร์มไม่รู้จัก / โพสต์ครบแล้ว → ปฏิเสธพร้อมข้อความเหตุผล
+- สำเร็จ → `status: PUBLISHED`, `phase: publish`, เพิ่มแพลตฟอร์มใน `published[]`, ผลแต่ละแพลตฟอร์มอยู่ใน `platforms_run`
+- `--force` = bypass ทุก gate (ต้องใช้อย่างระมัดระวัง)
+- **หมายเหตุ:** ผลลัพธ์ตอนนี้ยังเป็น placeholder จริงๆ (ยังไม่โพสต์ขึ้นแพลตฟอร์มจริง)
+
+### 6.9 ตรวจสอบสถานะและไฟล์
+
+```powershell
+... status --product "My-Product"       # status, phase, review, published, last_job
+... artifacts --product "My-Product"    # รายการไฟล์ที่ gen แล้ว (ไม่รวม metadata/logs)
+```
+
+ใช้ `artifacts` ก่อนรีวิว/โพสต์ เพื่อเช็คว่าไฟล์ครบ
+
+---
+
+## 7. การใช้งานผ่าน Telegram Bot
+
+### 7.1 เงื่อนไขก่อนใช้
+
+1. ตั้งค่า `TELEGRAM_BOT_TOKEN` และ `TELEGRAM_ALLOWED_USERS` ใน `shared\hermes_home\.env`
+2. เปิด Gateway ค้างไว้ (หัวข้อ 6.2) รอจน log ขึ้น `telegram connected`
+3. คุยกับ bot ผ่าน **private message** จาก user ID ที่อนุญาต (ดู `shared\hermes_home\channel_directory.json` — ปัจจุบันมี user ชื่อ "Yoseph" ID `1709297704`)
+4. **รีสตาร์ท Hermes** หลังแก้ skill เพื่อโหลด ai-factory v1.14.0
+
+### 7.2 ปุ่มยืนยัน (inline keyboard)
+
+Hermes มี **`clarify` tool** ในตัว (อยู่ใน default toolset) — เมื่อ agent เรียกด้วย `choices` บน Telegram จะ render เป็น **ปุ่มกดได้** อัตโนมัติ (หนึ่งปุ่มต่อ choice + ปุ่ม "✏️ Other" อัตโนมัติ):
+
+```
+❓ รีวิว draft ของ 'หูฟังบลูทูธ' — อนุมัติให้โพสต์ได้เลยไหม?
+
+1. อนุมัติ (approve)
+2. ส่งกลับแก้ไข (reject)
+
+[ 1 ]          ← ปุ่ม
+[ 2 ]          ← ปุ่ม
+[ ✏️ Other (type answer) ]
+```
+
+- ตัวเลือกต้องอยู่ใน `choices` ของ clarify เท่านั้น (สูงสุด 4 ตัว) — อย่า enumerate ในข้อความคำถาม
+- หลัง build เสร็จ bot จะถามรีวิวด้วยปุ่ม approve/reject / หลัง approve แล้ว bot จะถามยืนยันโพสต์ด้วยปุ่ม "ยืนยันโพสต์"/"ไม่เอา" ทุกแพลตฟอร์ม
+- **ปุ่มเลือกสินค้า research (แบ่งหน้า):** clarify tool จำกัด `MAX_CHOICES = 4` (ยืนยันในโค้ด `tools/clarify_tool.py`) → แต่ละหน้า = **ปุ่มสินค้า 3 อัน + ปุ่ม `[ ดูอันดับถัดไป ]`** — กดปุ่มถัดไปเพื่อเลื่อนดูจนครบ shortlist (ทุกอันดับเลือกด้วยปุ่มได้); ปุ่ม "✏️ Other" ยังพิมพ์หมายเลข/ชื่อได้ตลอด (เช่น กลับไปอันดับหน้าเก่า)
+- **ปุ่มยืนยันก่อนสร้าง Product:** หลังเลือกสินค้าแล้ว bot จะสรุปข้อมูลสินค้าให้ดู พร้อม**แปะลิงก์รูปสินค้า** (field `image_url` จาก `logs\shopee\last_search.json` — Telegram แสดงพรีวิวรูปให้อัตโนมัติ; ถ้าไม่มีรูปจะข้าม) แล้วถามยืนยันด้วยปุ่ม `[ ยืนยัน ] [ เลือกใหม่ ] [ ค้นใหม่ ]` — "เลือกใหม่" = ไม่สร้าง Product (โชว์ shortlist ใหม่ให้เลือก), "ค้นใหม่" = ไม่สร้าง Product แล้วโชว์ **keyword ล่าสุด 3 อันเป็นปุ่ม** (อ่านจาก `logs\shopee\research.jsonl`; กดปุ่มหรือใช้ "✏️ Other" พิมพ์ keyword ใหม่) แล้ว search ใหม่
+
+### 7.3 ค้นสินค้า Shopee ก่อนสร้าง Product (research)
+
+```
+คุณ:   /ai-factory หาสินค้า Shopee คอมมิชชันดี ขายดี หน่อย
+bot:   ค้นหา: keyword + เกณฑ์สมดุล (คอมมิชชัน ≥15% + ยอดขาย ≥500 + เรียงตามคอมมิชชัน + รวม AMS)
+       ผลลัพธ์ (10 อันดับ):
+       1. หูฟังบลูทูธ XYZ — 299฿, ขาย 1.2 หมื่น, คอมฯ 25% (+พิเศษ 5%)
+       2. ลำโพงพกพา ABC — 450฿, ขาย 8 พัน, คอมฯ 22%
+       3. แก้วเก็บความเย็น DEF — 120฿, ขาย 2.5 หมื่น, คอมฯ 20%
+       ... (ดูทั้งหมดจากปุ่ม [ ดูอันดับ ] ด้านล่าง)
+       ❓ เลือกสินค้าที่จะสร้าง Product ครับ? (หน้า 1/4)
+       [ #1 หูฟังบลูทูธ XYZ ]  [ #2 ลำโพงพกพา ABC ]
+       [ #3 แก้วเก็บความเย็น DEF ]  [ ดูอันดับ 4-6 ]
+       [ ✏️ Other (พิมพ์หมายเลขหรือชื่อสินค้า) ]
+คุณ:   กด [ ดูอันดับ 4-6 ]
+bot:   ❓ เลือกสินค้าที่จะสร้าง Product ครับ? (หน้า 2/4)
+       [ #4 … ]  [ #5 … ]  [ #6 … ]  [ ดูอันดับ 7-9 ]
+       [ ✏️ Other (พิมพ์หมายเลขหรือชื่อสินค้า) ]
+คุณ:   กด [ #5 … ]
+bot:   🖼️ https://down-th.img.susercontent.com/file/yyyyy.jpg   ← แปะลิงก์รูปสินค้า (Telegram แสดงพรีวิว)
+       ✅ สินค้าที่เลือก: (สินค้าอันดับ #5) — ราคา/ยอดขาย/คอมมิชชัน ตามผลค้นหา
+       ❓ ยืนยันใช้สินค้านี้สร้าง Product ใช่ไหม?
+       [ ยืนยัน ]  [ เลือกใหม่ ]  [ ค้นใหม่ ]
+คุณ:   กด [ ยืนยัน ]
+bot:   สร้าง Product จากสินค้าที่เลือก → export ข้อมูลสินค้าจริง (ราคา/ยอดขาย/คอมมิชชัน)
+       → เริ่ม build ได้เลยไหม?
+
+กด [ เลือกใหม่ ] → bot โชว์ shortlist ใหม่แล้วถามเลือกอีกครั้ง (ไม่สร้าง Product)
+กด [ ค้นใหม่ ]   → bot โชว์ keyword ล่าสุดเป็นปุ่ม: `[ หูฟังบลูทูธ ] [ ลำโพงพกพา ] [ แก้วเก็บความเย็น ]`
+       + ปุ่ม "✏️ Other" สำหรับพิมพ์ keyword ใหม่ → กดปุ่ม/พิมพ์แล้ว search ใหม่ (ไม่สร้าง Product)
+```
+
+> ⚠️ ต้องมี Shopee Affiliate API keys + whitelist access ก่อน (ดูหัวข้อ 8.1) — ถ้ายังไม่มี bot จะแจ้งวิธีตั้งค่า ไม่ใช่เดาข้อมูลขึ้นเอง
+
+#### 7.3.1 ตัวอย่างคำสั่ง + ผลลัพธ์จำลอง (ตอนยังไม่มี keys)
+
+**คำสั่ง `search` (ต้องมี keys ก่อน)**
+
+```powershell
+python C:\AI_FACTORY\shared\tools\shopee_research.py search --query "หูฟังบลูทูธ" --limit 3
+```
+
+- ถ้ายังไม่มี keys → จะเจอ error แบบนี้ (ระบบไม่เดาข้อมูลขึ้นเอง):
+
+```
+Missing Shopee Affiliate API credentials.
+Register an approved Shopee Affiliate account, request whitelist
+access for the Affiliate Open API, then fill in:
+  factories/shopee_affiliate/.env
+    SHOPEE_AFFILIATE_API_BASE_URL, SHOPEE_AFFILIATE_APP_ID,
+    SHOPEE_AFFILIATE_APP_SECRET  (or SHOPEE_AFFILIATE_PARTNER_KEY)
+```
+
+- ใส่ keys แล้ว → ผลลัพธ์ประมาณนี้ (**ผลลัพธ์จำลอง** เพื่อให้เห็นฟอร์แมตที่จะได้):
+
+```json
+{
+  "ok": true,
+  "query": "หูฟังบลูทูธ",
+  "count": 3,
+  "criteria": { "min_commission": 0.15, "min_sold": 500 },
+  "items": [
+    {
+      "index": 1,
+      "name": "หูฟังบลูทูธ XYZ รุ่นใหม่ กันน้ำ",
+      "price_min": 299.0,
+      "price_max": 329.0,
+      "sales": 12000,
+      "rating": 4.8,
+      "commission_rate": 0.25,
+      "seller_commission_rate": 0.05,
+      "shopee_commission_rate": 0.20,
+      "link": "https://shopee.co.th/product/123456",
+      "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-111111"
+    },
+    {
+      "index": 2,
+      "name": "หูฟังบลูทูธ ABC ครอบหู",
+      "price_min": 450.0,
+      "price_max": 499.0,
+      "sales": 8200,
+      "rating": 4.7,
+      "commission_rate": 0.22,
+      "seller_commission_rate": 0.0,
+      "shopee_commission_rate": 0.22,
+      "link": "https://shopee.co.th/product/654321",
+      "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-222222"
+    },
+    {
+      "index": 3,
+      "name": "หูฟังบลูทูธ ไร้สาย สเตอริโอ",
+      "price_min": 189.0,
+      "price_max": 219.0,
+      "sales": 31000,
+      "rating": 4.6,
+      "commission_rate": 0.18,
+      "seller_commission_rate": 0.04,
+      "shopee_commission_rate": 0.14,
+      "link": "https://shopee.co.th/product/987654",
+      "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-333333"
+    }
+  ]
+}
+```
+
+> field `image_url` = รูปสินค้า — ใช้แปะพรีวิวตอนยืนยันเลือก (หัวข้อ 7.2) และ**ดาวน์โหลดอัตโนมัติ** ลง `images\img1.<ext>` ตอน export (ดูด้านล่าง)
+
+**คำสั่ง `export` (เลือกสินค้าจาก shortlist ไปสร้าง Product)**
+
+```powershell
+python C:\AI_FACTORY\shared\tools\shopee_research.py export --product "หูฟังบลูทูธ" --index 1
+```
+
+→ เขียนไฟล์ `products\หูฟังบลูทูธ\source_data\selection.txt`:
+
+```
+สินค้า: หูฟังบลูทูธ XYZ รุ่นใหม่ กันน้ำ
+ราคา: 299 - 329 บาท
+ยอดขาย: 12000 ชิ้น
+คอมมิชชันรวม: 25.0%
+คอมมิชชันพิเศษ (ร้าน): 5.0%
+ลิงก์สินค้า: https://shopee.co.th/product/123456
+รูปสินค้า: https://down-th.img.susercontent.com/file/xxxxx.jpg
+```
+
+→ **ดาวน์โหลดภาพสินค้าอัตโนมัติ** ลง `products\หูฟังบลูทูธ\images\img1.jpg` (จาก field `image_url` — ไม่สำเร็จจะข้าม แล้ววิดีโอใช้ title card แทน) → จากนั้นรัน `build` ปกติ: stage `script` (`script_writer.py`) จะดึงข้อมูลจริงนี้ไปเขียน `scripts/script.txt` → voiceover พากย์ "...ราคา 299 - 329 บาท..." ในวิดีโอ และวิดีโอใช้**ภาพสินค้าจริง**จาก `images\` (แทนที่จะเป็น title card)
+
+**คำสั่ง `recent` (keyword ล่าสุดที่ค้น — ใช้ทำปุ่ม "ค้นใหม่")**
+
+```powershell
+python C:\AI_FACTORY\shared\tools\shopee_research.py recent --limit 3
+```
+
+→ อ่านจาก `logs\shopee\research.jsonl` (บันทึกทุกครั้งที่ search):
+
+```json
+{
+  "ok": true,
+  "limit": 3,
+  "recent": ["หูฟังบลูทูธ", "ลำโพงพกพา", "แก้วเก็บความเย็น"]
+}
+```
+
+ยังไม่เคย search → `"recent": []` (bot จะถามพิมพ์ keyword ใหม่แทน)
+
+> 💡 **ทดสอบโฟลว์ล่วงหน้าได้เลยโดยไม่ต้องรอ keys:** สร้าง Product แล้ววางไฟล์ `source_data\selection.txt` เอง (ฟอร์แมตตามด้านบน) + วางภาพสินค้าลง `images\` → รัน `build` ได้ทันที สคริปต์/เสียงพากย์/วิดีโอจะใช้ข้อมูลที่วางไว้ ระบบจะข้ามไฟล์ placeholder (ขึ้นต้นด้วย `Factory=`) อัตโนมัติ และ placeholder stage จะไม่เขียนทับข้อมูลจริง
+
+### 7.4 ตัวอย่างวงจรเต็ม
+
+```
+คุณ:   /ai-factory สร้าง Product Shopee ชื่อ หูฟังบลูทูธ
+bot:   สร้าง workspace สำเร็จ → products\หูฟังบลูทูธ\ (status: CREATED)
+
+คุณ:   gen draft หูฟังบลูทูธ
+bot:   build เสร็จ → DRAFT_READY
+       ❓ รีวิว draft ของ 'หูฟังบลูทูธ' — อนุมัติให้โพสต์ได้เลยไหม?
+       [ อนุมัติ (approve) ] [ ส่งกลับแก้ไข (reject) ]
+
+คุณ:   กด [ อนุมัติ (approve) ]
+bot:   APPROVED
+       ❓ ยืนยันโพสต์ไปยัง youtube สำหรับ 'หูฟังบลูทูธ' ใช่ไหม?
+       [ ยืนยันโพสต์ ] [ ไม่เอา ]
+
+คุณ:   กด [ ยืนยันโพสต์ ]
+bot:   publish youtube สำเร็จ → published: [youtube] (ถ้ายังมี tiktok/facebook ค้าง จะถามต่อทีละตัว)
+
+ถ้ากด [ ส่งกลับแก้ไข (reject) ]:
+bot:   ❓ มีอะไรให้แก้ไขใน draft นี้บ้าง?   ← open-ended (ไม่มีปุ่ม)
+คุณ:   พิมพ์คำแนะนำ → bot บันทึก notes + REJECTED → แก้แล้วสั่ง build ใหม่
+```
+
+### 7.5 กติกาที่ Hermes ปฏิบัติใน Telegram
+
+- สร้าง workspace จริงเสมอ ไม่ตอบรายชื่อสินค้าแทน
+- ไม่กล่าวอ้างว่า Product ถูกสร้าง/ถูกโพสต์ ถ้า command ไม่สำเร็จจริง (ต้องดู JSON `PUBLISHED`)
+- ไม่สร้าง URL/ราคา/ยอดสต็อก/ลิงก์ affiliate/ผลการโพสต์ขึ้นเอง
+- ไม่เขียน artifact นอก `products\<slug>\`
+- ไม่ publish โดยไม่ได้รับยืนยันผ่านปุ่มก่อน
+
+---
+
+## 8. รายละเอียดแต่ละ Factory
+
+### 8.1 Shopee Affiliate (`shopee_affiliate`)
+
+**สายการผลิต (stages):**
+```
+research → selection → script → assets → video → captions → social_posts → publishing
+```
+
+**เฟส (phases):**
+| เฟส | stages |
+|---|---|
+| `build` | research → selection → script → assets → video → captions |
+| `publish` | social_posts → publishing (แยก workflow ต่อแพลตฟอร์ม) |
+
+**Publish platforms:** `youtube` → `tiktok` → `facebook` (สั่งทีละตัวด้วย `--platform` หรือสั่งรวมให้โพสต์ที่เหลือ)
+
+**โฟลเดอร์:** `research, source_data, scripts, images, assets, audio, videos, captions, social_posts, publishing, metadata, logs, final`
+
+**Keys ใน .env (ค่าเริ่มต้น = ฟรี 100%):**
+- `VIDEO_PROVIDER=ffmpeg` — **ค่าเริ่มต้น**: ประกอบวิดีโอที่เครื่อง (free, ไม่ต้องใช้ key) ผ่าน `shared/tools/video_builder.py`
+- `SHOPEE_AFFILIATE_API_BASE_URL / APP_ID / APP_SECRET / PARTNER_ID / PARTNER_KEY` — สำหรับ `shopee_research.py` (ค้นสินค้า extra commission + ขายดี) **ต้องมีบัญชี Shopee Affiliate ที่อนุมัติ + ขอ whitelist Affiliate Open API ก่อน** (error 10035 ถ้ายังไม่ได้) — ตอนนี้ยังไม่มี keys ได้
+- `YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN/CHANNEL_ID`, `TIKTOK_CLIENT_KEY/SECRET/ACCESS_TOKEN/OPEN_ID`, `FACEBOOK_APP_ID/SECRET/PAGE_ID/PAGE_ACCESS_TOKEN` — ใช้ตอนต่อแพลตฟอร์มโพสต์
+- *(ไม่บังคับ)* `FAL_KEY`, `REPLICATE_API_TOKEN`, `RUNWAY_API_KEY`, `HEYGEN_API_KEY`, `IMAGE_PROVIDER` — API AI แบบเสียเงิน เก็บไว้ใน comment เท่านั้น ยังไม่จำเป็น
+
+### 8.2 E-book (`ebook`)
+
+**สายการผลิต (stages):**
+```
+research → outline → chapter_writer → editor → fact_check → cover_images → epub → pdf → publishing
+```
+
+**เฟส (phases):**
+| เฟส | stages |
+|---|---|
+| `build` | research → outline → chapter_writer → editor → fact_check → cover_images → epub → pdf |
+| `publish` | publishing (ขั้นเดียว ไม่มี --platform) |
+
+**โฟลเดอร์:** `research, outline, chapters, editing, fact_check, images, cover, epub, pdf, publishing, metadata, logs, final`
+
+**Keys ที่รองรับใน .env:** `EBOOK_PUBLISHING_API_KEY`
+
+---
+
+## 9. เส้นทางข้อมูลและ Artifact
+
+### 9.1 `metadata/product.json` (ข้อมูลหลักของสินค้า)
+
+| ฟิลด์ | ความหมาย |
+|---|---|
+| `product_name`, `slug`, `factory` | ข้อมูลพื้นฐาน |
+| `status` | CREATED / PROCESSING / DRAFT_READY / APPROVED / REJECTED / PUBLISHED / FAILED |
+| `phase` | `''` → `build` → `publish` |
+| `review` | `{status: pending/approved/rejected, notes, at}` |
+| `published` | รายชื่อแพลตฟอร์มที่โพสต์แล้ว (เช่น `["youtube","tiktok","facebook"]`) |
+| `jobs[]` | ประวัติ job (id, workflow, status, stages, error) |
+| `artifacts[]` | รายการ artifact (dedupe อัตโนมัติ ไม่ซ้ำข้ามรอบ) |
+
+### 9.2 ข้อมูลที่ถูกสร้าง/อัปเดตเมื่อรัน workflow
+
+| คำสั่ง | workflow ไฟล์ | artifact ตัวอย่าง |
+|---|---|---|
+| `test` | `workflows/test.json` | `research/test.txt`, `scripts/test.txt` (3 stage แรก) |
+| `build` | `workflows/build.json` | `research/build.txt`, `source_data/selection.txt` (ข้อมูลสินค้าจาก export), **`scripts/script.txt` (สคริปต์โปรโมตจริง: สรรพคุณ/ราคา/โปรโมชัน)**, `assets/assets.txt`, **`videos/promo.mp4` (วิดีโอจริงจาก ffmpeg ฟรี + เสียงพากย์จากสคริปต์)**, `captions/captions.txt` (Shopee) / `chapters/build.txt`, `pdf/build.txt` (ebook) |
+| `publish --platform youtube` | `workflows/publish-youtube.json` | `social_posts/youtube.txt`, `publishing/youtube.txt` |
+| `publish --platform tiktok` | `workflows/publish-tiktok.json` | `social_posts/tiktok.txt`, `publishing/tiktok.txt` |
+| `publish --platform facebook` | `workflows/publish-facebook.json` | `social_posts/facebook.txt`, `publishing/facebook.txt` |
+| `publish` (ebook) | `workflows/publish.json` | `publishing/publish.txt` |
+
+ทุกครั้งที่รัน: อัปเดต `products\<slug>\logs\workflow.json` + `metadata/product.json` + log ระดับโปรเจกต์ (`logs\factories\factories.jsonl` สำเร็จ / `logs\errors\errors.jsonl` ล้มเหลว)
+
+> **กันทับข้อมูลจริง:** stage ที่ยังเป็น placeholder จะเขียนไฟล์เฉพาะเมื่อไฟล์ยังไม่มี หรือยังเป็น placeholder เดิม (ขึ้นต้น `Factory=`) — ข้อมูลจริงที่ export จาก `shopee_research.py` (`source_data\selection.txt`) หรือวางเองจะ**ไม่ถูกเขียนทับ**ตอน build → สคริปต์/วิดีโอใช้ข้อมูลจริงเสมอ
+
+---
+
+## 10. การดู Log และตรวจสอบระบบ
+
+### 10.1 ดู log ของ Gateway แบบ realtime
+
+```powershell
+Get-Content C:\AI_FACTORY\shared\hermes_home\logs\gateway.log -Wait
+```
+
+ใช้เป็นอันดับแรกเมื่อ bot ไม่ตอบหรือไม่ connect
+
+### 10.2 ตรวจสอบสถานะ Gateway
+
+```powershell
+Get-Content C:\AI_FACTORY\shared\hermes_home\gateway_state.json
+```
+
+ดูว่า `gateway_state` เป็น `running` และ `platforms.telegram.state` เป็น `connected` หรือไม่
+
+### 10.3 ดูประวัติการทำงานของโรงงาน
+
+```powershell
+Get-Content C:\AI_FACTORY\logs\products\products.jsonl   # ประวัติสร้างสินค้า + review
+Get-Content C:\AI_FACTORY\logs\factories\factories.jsonl # ประวัติ job สำเร็จ
+Get-Content C:\AI_FACTORY\logs\errors\errors.jsonl       # ประวัติ error
+```
+
+### 10.4 ดูว่า Hermes ใช้ model ตัวไหนอยู่
+
+- **ตอนเริ่ม session (terminal):** บรรทัด `🤖 AI Agent initialized with model: <model>` = ตัวที่ใช้จริง; ถ้าถูก fallback จะเห็น `🔄 Fallback model: <model> (<provider>)`
+- **ระหว่าง session:** พิมพ์ `/status` → บรรทัด `Model: <model> (<provider>)` (เช่น `gemini-3.6-flash (gemini)` = ใช้ Gemini, `(openrouter)` = ใช้ตัวสำรอง)
+- ใช้ 2 จุดนี้เช็คก่อนเสมอ ถ้าสงสัยว่าระบบใช้ model ไหนอยู่
+
+### 10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน (fallback)
+
+เมื่อ Gemini (ชั้น ①) ใช้ไม่ได้ ระบบจะไล่ fallback ตามลำดับใน `config.yaml` — ดูจาก `agent.log` ว่า turn ไหนตอบด้วยโมเดล/provider ตัวไหนจริง:
+
+**วิธีที่ 1 — ดู `agent.log` (แม่นสุด):**
+
+```powershell
+Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-String "turn:|API call #1:|Fallback activated"
+```
+
+ตัวอย่างบรรทัดจริงที่ควรเห็น:
+
+```
+turn: session=20260809_184342_c31a0899 model=upstage/solar-pro4:free provider=nous platform=telegram
+API call #1: model=upstage/solar-pro4:free provider=nous in=25196 out=85 total=25281 latency=9.6s
+Fallback activated: gemini-3.6-flash → nvidia/nemotron-3-ultra-550b-a55b:free (openrouter)
+provider=custom base_url=http://100.77.88.33:1234/v1/ model=qwen/qwen3.5-9b
+```
+
+| บรรทัดใน log | ความหมาย |
+|---|---|
+| `turn: ... model=X provider=Y platform=telegram` | turn นี้ใช้โมเดล/provider ไหน (Y = `gemini` / `nous` / `openrouter` / `custom` / `lmstudio`) |
+| `API call #1: model=X provider=Y ... latency=Zs` | เรียก API จริงไปตัวไหน + ใช้เวลากี่วิ |
+| `Fallback activated: A → B (provider)` | ชั้น A ล้ม กำลังสลับไปชั้น B |
+| `provider=custom base_url=http://100.77.88.33:1234/v1` | **ตอบผ่านเครื่องทำงาน (ชั้น ⑦)** — grep เฉพาะได้: |
+
+```powershell
+Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-String "100.77.88.33:1234"
+```
+
+**วิธีที่ 2 — ดู chain ปัจจุบัน:**
+
+```powershell
+& $hermes fallback list
+```
+
+ควรเห็น 7 ชั้นตรงกับ config: `nous` × 3 (`solar-pro4:free` → `hy3:free` → `stepfun:free`) → `openrouter` × 2 → `custom` (`qwen/qwen3.5-9b` @ `100.77.88.33:1234`) → `lmstudio` (`qwen/qwen3-1.7b`) — ถ้าลำดับ/โมเดลไม่ตรง config ให้รีสตาร์ท Hermes/Gateway (แก้ config แล้วต้อง restart เสมอ)
+
+**วิธีที่ 3 — ทดสอบชั้นใดชั้นหนึ่งตรงๆ (ไม่ผ่าน chain):**
+
+```powershell
+# ทดสอบ Nous ฟรี (ชั้น ②-④)
+& $hermes chat -q "ตอบว่า OK เท่านั้น" -Q --provider nous -m upstage/solar-pro4:free --max-turns 2
+
+# ทดสอบเครื่องทำงานผ่าน Tailscale (ชั้น ⑦)
+& $hermes chat -q "ตอบว่า OK เท่านั้น" -Q --provider lmstudio-work -m qwen/qwen3.5-9b --max-turns 2
+```
+
+> ⚠️ **อย่าใช้ `--provider custom`** ในการทดสอบ — มัน resolve ไป OpenRouter (base_url ใน auth.json) ไม่ใช่เครื่องทำงาน ต้องใช้ชื่อ entry `lmstudio-work` (ใน `custom_providers`) ถึงจะไป `100.77.88.33:1234` จริง
+> 💡 หลังทดสอบเช็ค `agent.log` อีกทีเสมอว่า session นั้น `provider=nous` / `base_url=100.77.88.33` จริง — เพราะถ้าชั้นที่ทดสอบล้ม "OK" ที่เห็นอาจมาจากชั้นถัดไปใน chain
+
+**ตัวอย่างจริง (ทดสอบ end-to-end 14 ส.ค. 2026):**
+
+*ชุดที่ 1 — ชั้นหลัก (ข้อความจริงใน Telegram: "ตอนนี้คุณใช้โมเดลอะไรอยู่"):*
+
+```
+inbound message:  platform=telegram user=Yoseph chat=1709297704 msg='ตอนนี้คุณใช้โมเดลอะไรอยู่'
+conversation turn: session=20260809_184342_c31a0899 model=gemini-3.6-flash provider=gemini platform=telegram
+API call #2:       model=gemini-3.6-flash provider=gemini in=25615 out=29 total=25644 latency=2.6s
+response ready:    platform=telegram chat=1709297704 time=3.6s api_calls=1 response=91 chars
+[Telegram] Sending response (91 chars) to 1709297704        ← gateway.log: ส่งถึงแชทจริง
+```
+
+*ชุดที่ 2 — fallback ชั้น 1 (บังคับ Gemini ล้มโดยลบ key ชั่วคราว → ตกไป Nous):*
+
+```
+inbound message:  platform=telegram msg='สวัสดี'
+conversation turn: ... model=upstage/solar-pro4:free provider=nous platform=telegram
+API call #1:       model=upstage/solar-pro4:free provider=nous in=25196 out=85 total=25281 latency=9.6s
+response ready:    time=21.1s api_calls=1 response=116 chars
+```
+
+→ สรุป: ชั้นหลักตอบ 3.6s / fallback ชั้น 1 ตอบ 9.6s — ทั้ง 2 เส้นทางทำงานจริงผ่าน Telegram; วิธีดูแบบนี้ใช้ได้กับทุกชั้น (เปลี่ยนไป grep `provider=openrouter` / `100.77.88.33:1234` / `provider=lmstudio`)
+
+### 10.6 ตัวอย่างข้อมูลที่เห็นใน log จริง (ณ วันที่ 9 ส.ค. 2026)
+
+- Product ที่สร้างแล้ว: `Test-Product--Thai-สินค้า`, `Test-E-book`, `Failure-Test`, `Unicode-ไทย-Test`, `แก้วเก็บความเย็น`, `หูฟังบลูทูธ`
+- Job สำเร็จ: `Test-Product--Thai-สินค้า`, `Test-E-book`, `หูฟังบลูทูธ`
+- Error ที่บันทึก: `Failure-Test` (ebook) — error: `Intentional acceptance-test failure` (เป็นการทดสอบตั้งใจ)
+
+---
+
+## 11. สถานะปัจจุบันและแผนพัฒนา
+
+### ✅ ทำได้แล้วตอนนี้
+- สร้าง/จัดการ Product workspace แยกส่วนตามโรงงาน (รองรับชื่อภาษาไทย/Unicode)
+- **Workflow 2 เฟส:** `build` (draft) → `review` (approve/reject + gate) → `publish`
+- **Publish แยกแพลตฟอร์ม** สำหรับ Shopee (YouTube → TikTok → Facebook) พร้อมติดตาม `published[]` กันโพสต์ซ้ำ
+- **ปุ่มยืนยันบน Telegram** (review approve/reject + ยืนยันโพสต์) ผ่าน clarify tool ของ Hermes
+- **วิดีโอโปรโมต ฟรี 100%** — stage `video` ใน build ประกอบวิดีโอด้วย ffmpeg (`shared/tools/video_builder.py`): ภาพจาก `images/` + เอฟเฟกต์ Ken Burns + ชื่อสินค้า → `videos/promo.mp4` (ไม่มีค่าใช้จ่าย ไม่ต้องใช้ API)
+- **สคริปต์จริง + Voiceover ฟรี** — stage `script` เขียนสคริปต์โปรโมต (สรรพคุณ/ราคา/โปรโมชัน) ลง `scripts/script.txt` (`script_writer.py`); วิดีโอพากย์ส่วน `[voiceover]` ของสคริปต์ด้วย Microsoft Edge TTS (`edge-tts`, อัตโนมัติไทย/อังกฤษ); ถ้าไม่มี edge-tts/อินเทอร์เน็ต วิดีโอยังสร้างได้แบบไม่มีเสียง
+- **ค้นสินค้า Shopee ก่อนสร้าง Product** — `shopee_research.py` (Affiliate Open API `productOfferV2`): กรอง extra commission (AMS) + ยอดขายสูง แล้ว export ข้อมูลจริงลง product → สคริปต์/วิดีโอใช้ข้อมูลจริง (รอ keys + whitelist อยู่)
+- คำสั่งตรวจสอบ: `status` / `artifacts`
+- ตรวจสอบผ่าน log ทั้ง 3 ระดับ (products / factories / errors)
+- สั่งงานผ่าน Terminal และ Telegram Bot (ด้วย skill `ai-factory` v1.14.0)
+
+### 🚧 ยังไม่ทำ (ตามการออกแบบ)
+- ยังไม่มี adapter จริงสำหรับ Shopee API, การโพสต์ YouTube/TikTok/Facebook, EPUB/PDF publishing → stage เหล่านั้นยังเขียน placeholder
+- การ Gen วิดีโอ AI (Fal, Runway, HeyGen, Replicate) ยังไม่เปิดใช้งาน — ใช้ ffmpeg ท้องถิ่นฟรีแทน (ดูหัวข้อ 8.1)
+- `integrations.example.json` ระบุชัดเจน: free local pipeline (ffmpeg) พร้อมใช้; paid API adapters intentionally not configured
+
+### 🗺️ ขั้นตอนต่อไปที่แนะนำ
+1. ตั้งค่าเฉพาะ keys ที่จำเป็นใน `.env` ของโรงงานนั้นก่อน (ตอนนี้ไม่ต้องใช้ key ใดเลยสำหรับวิดีโอ)
+2. ทดสอบวิดีโอฟรี: ใส่ภาพสินค้าลง `products\<slug>\images\` แล้วรัน `build` → ได้สคริปต์จริงที่ `scripts/script.txt` + `videos/promo.mp4` พร้อมเสียงพากย์จากสคริปต์ (แก้สคริปต์แล้ว build ใหม่เพื่อเปลี่ยนเสียงพากย์ได้)
+3. ต่อ Shopee Affiliate API ก่อน (ได้ภาพสินค้าจริง + ข้อมูลราคามาใส่ใน research/images)
+4. จากนั้นค่อยเพิ่มการโพสต์จริงทีละแพลตฟอร์ม (YouTube ก่อน): เติม logic จริงใน `workflows/publish-youtube.json` (โครงสร้างพร้อมแล้ว)
+5. (ไม่บังคับ) ถ้าอยากได้วิดีโอ AI จริงค่อยเปิด `FAL_KEY`/`REPLICATE_API_TOKEN` แล้วเปลี่ยน `VIDEO_PROVIDER`
+6. เพิ่มโรงงานใหม่ได้โดยไม่แตะโค้ด manager: สร้าง `factories\<new-id>\config\factory.json` (มี phases + publish_platforms ได้) + workflows + .env
+
+---
+
+## 12. ข้อควรระวังด้านความปลอดภัย
+
+- **ห้าม**ใส่ key ใดๆ ในโฟลเดอร์ product, log, README, หรือข้อความแชท
+- ไฟล์ `.env` ทั้งหมดถูก Git ignore แล้ว (`*.env`, `*.env.*`) — อย่าเผลอ `git add -f`
+- `products\` และ `archive\` เป็นข้อมูล ไม่ใช่โค้ด → ถูก ignore ด้วย
+- ห้ามแชร์ log ที่มีลิงก์บัญชีส่วนตัวหรือ credentials
+- ตรวจสอบ `TELEGRAM_ALLOWED_USERS` ให้มีแค่คนที่ไว้ใจได้เท่านั้น
+- อย่าเปลี่ยน model ใน `config.yaml` โดยไม่ได้เช็คว่ามีอยู่จริงใน OpenRouter ก่อน
+- `publish --force` ใช้ได้เฉพาะเมื่อ user ยืนยันชัดเจนว่าต้องการ bypass review gate
+
+---
+
+## 13. การแก้ปัญหาเบื้องต้น (Troubleshooting)
+
+| อาการ | สาเหตุที่เป็นไปได้ | วิธีแก้ |
+|---|---|---|
+| `$hermes` ไม่รู้จัก | เปิดหน้าต่าง PowerShell ใหม่ | ตั้งตัวแปรใหม่ตามหัวข้อ 5.2 |
+| Bot ไม่ตอบ / ไม่ connect | Gateway ไม่ได้รัน | รัน `schtasks /Run /TN "AI_Factory_Gateway"` (หรือเปิด `& $hermes gateway` ค้างไว้) + เช็ค `gateway.log`; ถ้า `state\gateway.lifecycle.json` ขึ้น `phase: exited` = Gateway ไม่รันแน่นอน (แม้ `gateway_state.json` จะบอก `running` ก็ตาม — ไฟล์นั้นอาจค้างข้อมูลเก่า) |
+| Gateway ถูกฆ่าแล้วไม่กลับมาเอง | ฆ่าไปถึงขั้น watchdog (ทั้ง wscript/cmd/bat) หรือรันแบบ manual (วิธี B) | ถ้าฆ่าเฉพาะตัว Gateway (`python.exe` จาก `lifecycle.json`) watchdog จะรีรันให้เองภายใน ~30 วิโดยไม่ต้องทำอะไร; ถ้าไม่กลับมา = ฆ่าถึงขั้น watchdog แล้ว → รัน `schtasks /Run /TN "AI_Factory_Gateway"` ใหม่ (หรือ `& $hermes gateway`) |
+| ไม่เห็น `telegram connected` | Token ผิด หรือถูก rate-limit | เช็ค `TELEGRAM_BOT_TOKEN`, ลองรันใหม่ |
+| สร้างสินค้าแล้ว error `FileExistsError` | slug ซ้ำกับที่มีอยู่ | เปลี่ยนชื่อสินค้า หรือลบโฟลเดอร์เดิม |
+| `Product/factory mismatch` | ส่ง `--product` ผิดโรงงาน | รัน `list` ดู factory ที่ถูกต้องของ product นั้น |
+| publish → `ok: false` "not approved" | ยังไม่ได้ review approve | รัน `review --status approve` (หลัง build) |
+| publish → `ok: false` "no build draft" | ยังไม่เคย build หรือ build ล้มเหลว | รัน `build` ก่อน แล้ว review แล้วค่อย publish |
+| publish → `ok: false` "already published" | แพลตฟอร์มนี้โพสต์ไปแล้ว | ใช้ `--platform` ตัวที่เหลือ หรือ build ใหม่เพื่อทำ draft ใหม่ |
+| publish → `ok: false` "Unknown platform" | พิมพ์ชื่อแพลตฟอร์มผิด | ดูรายการใน error หรือ `list` (youtube/tiktok/facebook) |
+| review approve → `ok: false` | สินค้ายังไม่เคย build (CREATED) | ต้อง `build` ให้เป็น DRAFT_READY ก่อน |
+| Job ติด `FAILED` | stage พัง (หรือรันด้วย `--fail`) | อ่าน `products\<slug>\logs\workflow.json` และ `logs\errors\errors.jsonl` |
+| export แล้วภาพสินค้าไม่ขึ้น (`"image": "skipped: …"`) | ไม่มี `image_url` / ลิงก์ตาย / URL คืน HTML / ไฟล์ใหญ่เกิน 5MB | ดูเหตุผลจาก field `image` ในผลลัพธ์ export: `no image_url` = สินค้าไม่มีรูป, `response is not an image` = URL คืนหน้า HTML, `too large` = เกิน 5MB, `URL error/HTTP …` = ลิงก์ตายหรือถูกบล็อก — วิดีโอจะใช้ title card แทน; ถ้าอยากได้รูปจริง วางไฟล์ภาพเองที่ `products\<slug>\images\` แล้วรัน build ใหม่ |
+| Hermes ใช้ skill/config เก่า | แก้ skill แล้วไม่รีสตาร์ท | ออกจาก Hermes แล้วเปิดใหม่ (เพื่อโหลดปุ่ม clarify ใหม่) |
+| `-z --provider lmstudio` error 64K context (main หรือ aux) | Qwen3-1.7b (32K) ต่ำกว่าเกณฑ์ Hermes 64K | ตรวจ config: `custom_providers` ต้องมี `context_length: 32768` ต่อโมเดล lmstudio (bypass main) + `auxiliary.compression` ต้องใช้โมเดล ≥64K เช่น OpenRouter ฟรี (ไม่มี bypass ในส่วนนี้) |
+| Fallback ทั้งหมด (Gemini+Nous+OpenRouter) ล้มแล้ว Hermes **ค้าง/ไม่ตอบ** (ไม่ข้ามไปตัวถัดไป) | ตัว fallback ที่ resolve ได้แต่ server ไม่พร้อม (เช่น LM Studio เครื่องทำงานปิดอยู่ / เครื่องนี้ปิดอยู่) — fallback เลือกตามลำดับ config และ **ไม่ข้าม** ตัวที่ค้าง (timeout × retries) | เปิด server ตัวนั้นก่อน; หรือสลับลำดับ config ให้ตัวที่พร้อมอยู่ก่อนชั่วคราว |
+| LM Studio ตอบช้ามาก / Hermes timeout (`-z --provider lmstudio` ค้าง exit=124) | Qwen3-1.7b เป็น reasoning model คิดก่อนตอบ (~1 นาที/1.4K tokens; Hermes ส่ง prompt ~8-15K → 5-10 นาที/รอบ) | ใช้เป็นสำรองฉุกเฉินเท่านั้น; ทำงานหลักด้วย Gemini/OpenRouter; จะปิด reasoning ต้องทำใน GUI ของ LM Studio (API เวอร์ชัน 0.4.20 ยังไม่รองรับ) |
+| LM Studio `Context length exceeded` หลังเคยทำงานได้ | รีสตาร์ท LM Studio แล้วโมเดลโหลดกลับที่ context 8192 (default) | โหลดใหม่ด้วย 32K: `lms load qwen/qwen3-1.7b -c 32768 -y` (หรือตั้ง GUI: คลิกโมเดล → Context Length = **32768** → โหลดใหม่) แล้วลองใหม่ |
+| ปุ่มไม่ขึ้นใน Telegram | Hermes ยังไม่ได้โหลด skill ใหม่ หรือ clarify tool ไม่ว่าง | รีสตาร์ท Hermes; เช็คว่า default toolset มี clarify |
+| ชื่อสินค้าไทย/Unicode ใช้ได้ไหม | ได้ — slug รองรับ Unicode | เช็ค path ใน JSON output อย่าใช้ path ที่ผิดพลาด |
+| ไม่เห็น Gemini ถูกใช้ (ขึ้น `(openrouter)` / `Fallback model`) | ยังไม่ใส่ `GEMINI_API_KEY` หรือ key ผิด/ถูก revoke | ตรวจ `shared\hermes_home\.env` มี `GEMINI_API_KEY=AIza...` ถูกต้อง → รีสตาร์ท Hermes (ดูหัวข้อ 5.3) |
+| เปิด Hermes แล้วขึ้น `No inference provider is configured yet` + ถาม `Set up a provider now?` | ยังไม่มี `GEMINI_API_KEY` (primary ของ config เป็น gemini) — Hermes ตรวจ primary ก่อน | พิมพ์ `n` เพื่อข้าม → ระบบใช้ OpenRouter ฟรีต่อได้ตามปกติ (fallback); พอใส่ key แล้วจะไม่ขึ้นอีก (ดูหัวข้อ 5.3) |
+| `-z`/`--oneshot` error `No usable credentials found for provider 'gemini'` | โหมด one-shot ไม่ผ่าน fallback chain (ต่างจากโหมดคุยปกติ) | ใช้กับ config ที่มี Gemini key แล้ว หรือ override: `& $hermes -z "<prompt>" --provider openrouter -m "nvidia/nemotron-3-ultra-550b-a55b:free"` |
+| `gemini-3.6-flash` error (404 / model not found) | model id ไม่ตรงกับที่ Google เปิดให้บัญชีนี้ | แก้ `config.yaml` → `default: gemini-2.5-flash` (หรือ `gemini-3-flash`) หรือรัน `& $hermes model` เลือกใหม่ |
+
+---
+
+## 14. Changelog
+
+### v3 — 14 ส.ค. 2026 (fallback chain ใหม่ + docs ซิงก์)
+
+- **Fallback chain 5 → 8 ระดับ:** เพิ่ม **Nous Portal** (login OAuth ครั้งเดียว: `hermes auth add nous`) เป็นชั้น ②③④ — `upstage/solar-pro4:free` (524K context) → `tencent/hy3:free` (295B agentic) → `stepfun/step-3.7-flash:free` (multimodal) — ต่อจาก Gemini ก่อน OpenRouter ฟรี ×2
+- **เครื่องทำงานย้าย Ollama → LM Studio:** `qwen3:8b` @ `100.77.88.33:11434` → `qwen/qwen3.5-9b` @ `100.77.88.33:1234` (entry `custom_providers` = `lmstudio-work`; ทดสอบจริงตอบ ~28s ผ่าน Tailscale)
+- **สคริปต์ auto-start ฝั่งเครื่องทำงาน:** `shared/tools/work-lmstudio-autostart.ps1` — โหลด qwen3.5-9b + เปิด server (bind 0.0.0.0) อัตโนมัติตอน login
+- **ทดสอบ fallback จริงผ่าน Telegram:** บังคับ Gemini ล้ม (ลบ key ชั่วคราว) → bot ตอบด้วย `solar-pro4:free` (Nous) ใน ~9.6s ✅
+- **หัวข้อใหม่ §10.5:** วิธีเช็คว่า bot ตอบผ่านชั้นไหน (ดู `turn:` / `API call #1:` / `Fallback activated` / grep `100.77.88.33:1234`)
+- **docs ซิงก์ config จริง:** README.md · Quick-Start.md · FALLBACK-AI-SETUP.md ตรงกับ `config.yaml` (chain 7 ชั้น + Gemini primary); `hermes fallback list` ยืนยันแล้ว
+- **บทเรียน:** ⚠️ อย่าใช้ `--provider custom` ในการทดสอบ (resolve ไป OpenRouter) — ใช้ `--provider nous -m <รุ่น:free>` หรือ `--provider lmstudio-work -m qwen/qwen3.5-9b` แทน
+- **Nous ใช้ได้เฉพาะโมเดล `:free`** — ตัวเสียเงิน (เช่น `anthropic/claude-sonnet-4.6`) error `requires credits` จนกว่าจะเติมเครดิตที่ portal.nousresearch.com
+
+### v2 — 11 ส.ค. 2026
+
+- Workflow 2 เฟส (build → review → publish), publish แยกแพลตฟอร์ม, ปุ่มยืนยัน review/โพสต์, Gateway auto-restart 2 ชั้น
+
+---
+
+*เอกสารนี้สร้างจากข้อมูลจริงในโปรเจกต์ (config, workflows, factory_manager.py, SKILL.md, logs) ณ วันที่ 14 สิงหาคม 2026*

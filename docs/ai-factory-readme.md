@@ -1,0 +1,154 @@
+# AI Factory
+
+Hermes Agent runs natively on Windows as the Factory Manager. Its state lives in `C:\AI_FACTORY\shared\hermes_home`; all product assets live only in `C:\AI_FACTORY\products\<windows-safe-slug>`.
+
+> 📚 เอกสารเต็ม (ไทย): [Workthrough.md](Workthrough.md) · เริ่มใช้ด่วน: [Quick-Start.md](Quick-Start.md)
+
+## What it does
+
+A **two-phase production workflow** for content products, controlled from a terminal or the Telegram bot:
+
+```
+create → build (draft) → review (approve gate) → publish (per platform)
+```
+
+- **build** generates the draft. For Shopee this is research → selection → script → assets → video → captions. The `script` and `video` stages are **real and 100% free** (see "Free video & voiceover" below); the other stages write placeholders until real providers are enabled.
+- **review** is a gate: `publish` refuses to run unless the draft was approved.
+- **publish** posts per platform for Shopee (YouTube → TikTok → Facebook, one at a time) and tracks `published[]` so nothing is posted twice. E-books have a single publishing step.
+
+## Architecture
+
+`shared\tools\factory_manager.py` discovers factories from `factories\<factory-id>\config\factory.json`; it has no factory-specific `if/else` routing. Add future factories by adding their own config, workflow, prompts/scripts, README, and factory-local `.env`.
+
+Current factories:
+
+- `shopee_affiliate`: research → selection → script → assets → video → captions → social_posts → publishing (per-platform publish: youtube, tiktok, facebook).
+- `ebook`: research → outline → chapter_writer → editor → fact_check → cover_images → epub → pdf → publishing.
+
+Helper tools (all free, no API keys needed for the video pipeline):
+
+| Tool | Purpose |
+|---|---|
+| `shared/tools/shopee_research.py` | Search Shopee affiliate products (extra commission + high sales), export the pick into a product, list recent search keywords. Requires Shopee Affiliate API keys (not configured yet). |
+| `shared/tools/script_writer.py` | Writes a real promo script (`[voiceover]` + `[details]`) to `scripts/script.txt` from research/selection data. |
+| `shared/tools/video_builder.py` | Assembles the promo video locally with ffmpeg + a free Edge TTS voiceover. |
+
+## Key locations
+
+- `C:\AI_FACTORY\shared\hermes_home\.env`: `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_ALLOWED_USERS`.
+- `C:\AI_FACTORY\factories\shopee_affiliate\.env`: Shopee affiliate, video/image provider, YouTube, TikTok, and Facebook credentials. `VIDEO_PROVIDER=ffmpeg` is the free default.
+- `C:\AI_FACTORY\factories\ebook\.env`: E-book-specific credentials when needed.
+
+All `.env` files are ignored by Git. Never put any key in product folders, logs, README files, or chat messages.
+
+## Quick Start: every new PowerShell window
+
+Run this before starting Hermes or its Telegram Gateway:
+
+```powershell
+$env:HERMES_HOME='C:\AI_FACTORY\shared\hermes_home'
+$env:AI_FACTORY_ROOT='C:\AI_FACTORY'
+$hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe'
+```
+
+`HERMES_HOME` tells Hermes where its configuration, keys, skills, and logs live. `AI_FACTORY_ROOT` identifies the factory workspace. Define `$hermes` again in every new PowerShell window.
+
+## Free video & voiceover (no API keys)
+
+`VIDEO_PROVIDER=ffmpeg` (the default) builds promo videos entirely on this machine:
+
+- **Video:** `video_builder.py` turns product images from `products\<slug>\images\` into `videos/promo.mp4` (720p@30fps, Ken Burns effect, product name caption). With no images it renders a title card. Requires ffmpeg (free): `winget install Gyan.FFmpeg`.
+- **Voiceover:** a free Microsoft Edge TTS voice (`edge-tts`, auto Thai/English) narrates the script's `[voiceover]` section; the video length adapts to the narration. Install (free): `pip install edge-tts`. If it's missing or offline, the video is built silently without audio.
+- **Script:** `script_writer.py` builds a real promo script (features/price/promo) from `research/` + `source_data/`; exported Shopee data flows straight into it.
+- Build never overwrites real data — placeholder stages only create files that are missing or still placeholders.
+
+## Commands
+
+> `...` = `python C:\AI_FACTORY\shared\tools\factory_manager.py`
+
+| Command | Purpose |
+|---|---|
+| `& $hermes` | Start an interactive Hermes session (exit with `/exit` or Ctrl+C). Restart after changing skills/config. |
+| `& $hermes gateway` | Start the Telegram Gateway manually (keep this window open while using the bot). |
+| `schtasks /Run /TN "AI_Factory_Gateway"` | Start the Gateway via Task Scheduler (registered: auto-starts at logon, hidden window, watchdog auto-restart ~30s + task restart backup). |
+| `shared\tools\stop_gateway.bat` | Stop the Gateway watchdog cleanly (stays stopped; `schtasks /End` alone is not enough). |
+| `... list` | List registered factories (stages, phases, publish platforms). |
+| `... create --factory <id> --name "<name>"` | Create a Product workspace. |
+| `... test --factory <id> --product "<slug>"` | Run the foundation test workflow (placeholders only). |
+| `... build --factory <id> --product "<slug>"` | Build the draft (`DRAFT_READY`; resets review to pending). |
+| `... review --product "<slug>" --status approve\|reject [--notes "..."]` | Review gate (approve only after a build). |
+| `... publish --factory <id> --product "<slug>" [--platform youtube\|tiktok\|facebook]` | Publish (requires APPROVED; `--force` bypasses gates). |
+| `... status --product "<slug>"` | Show status, phase, review, `published[]`. |
+| `... artifacts --product "<slug>"` | List generated files. |
+
+### Shopee product research (before creating)
+
+```powershell
+python C:\AI_FACTORY\shared\tools\shopee_research.py search --query "<keyword>"        # ranked shortlist (commission>=15%, sales>=500, incl. AMS)
+python C:\AI_FACTORY\shared\tools\shopee_research.py export --product "<slug>" --index <n>  # import pick: real data + auto-download product photo
+python C:\AI_FACTORY\shared\tools\shopee_research.py recent --limit 3                  # last 3 search keywords (re-search buttons)
+```
+
+Requires an approved Shopee Affiliate account + whitelist access for the Affiliate Open API (fill `factories\shopee_affiliate\.env`). Without keys the tool reports the setup steps instead of inventing data.
+
+## Use the Telegram bot
+
+Once the Gateway reports it is connected, send the bot a private message (see Workthrough for the full button walkthrough):
+
+```text
+/ai-factory หาสินค้า Shopee คอมมิชชันดี ขายดี หน่อย
+/ai-factory สร้าง Product Shopee ชื่อ หูฟังบลูทูธ
+```
+
+The `ai-factory` skill (v1.14.0) creates real Products through the Factory Manager rather than returning a text listing. Confirmations render as **tappable inline buttons** via the `clarify` tool:
+
+- **Pick a product** from the research shortlist: item buttons `[ #1 … ] [ #2 … ] [ #3 … ]` + a `[ ดูอันดับถัดไป ]` page button (the clarify cap is 4 choices), plus `✏️ Other` to type.
+- **Confirm before creating**: product photo + `[ ยืนยัน ] [ เลือกใหม่ ] [ ค้นใหม่ ]` (ค้นใหม่ offers the last 3 keywords as buttons).
+- **Review**: `[ อนุมัติ (approve) ] [ ส่งกลับแก้ไข (reject) ]` after build.
+- **Publish**: `[ ยืนยันโพสต์ ] [ ไม่เอา ]` before every platform.
+
+The same commands work for E-books by naming an E-book.
+
+## Gateway auto-start at logon (Task Scheduler)
+
+A scheduled task **`AI_Factory_Gateway`** is registered so the Telegram Gateway starts automatically every time you log into Windows — no need to keep a terminal window open:
+
+- Hidden window via `wscript.exe` → `shared\tools\start_gateway_hidden.vbs` → `shared\tools\start_gateway.bat` (sets `HERMES_HOME`/`AI_FACTORY_ROOT` + runs `hermes gateway`, with a PID guard against double-starting).
+- **Auto-restart (2 layers):** ① a **watchdog loop inside the .bat** (primary) relaunches the Gateway ~10s after it dies — tested: killed the Gateway and it was `connected` again in ~30s. It logs every restart to `logs\watchdog.log` and stops after 6 consecutive fast fails (died within 60s of start — crash-loop guard for broken configs). ② Task Scheduler "restart on failure" (3×, 1 min apart) is the backup for when the watchdog itself is killed. ⚠️ Task Scheduler restart-on-failure does **not** fire for manually started runs (`schtasks /Run`) — only for trigger-started (logon) runs — so the watchdog is what guarantees recovery.
+- **Telegram alert on restart:** every `watchdog.log` entry is pushed to the allowed Telegram users by `shared\tools\watchdog_notify.py` (state in `logs\.watchdog_notify_state.json`, send log in `logs\notify.log`; only new lines, "stop requested" lines skipped). Tested: killed the Gateway → alert received.
+- **Stop cleanly:** `shared\tools\stop_gateway.bat` — `schtasks /End` alone is NOT enough (the watchdog survives and relaunches); the stop script writes a stop marker + kills the processes so it stays stopped.
+- Re-register anytime: `powershell -ExecutionPolicy Bypass -File C:\AI_FACTORY\shared\tools\register_gateway_task.ps1`; delete with `schtasks /Delete /TN "AI_Factory_Gateway" /F`.
+- Run it on demand: `schtasks /Run /TN "AI_Factory_Gateway"`. Check it is alive via `shared\hermes_home\state\gateway.lifecycle.json` (`phase: running`) or `gateway_state.json` (`telegram.state: connected`).
+
+## Watch the Gateway log
+
+```powershell
+Get-Content C:\AI_FACTORY\shared\hermes_home\logs\gateway.log -Wait
+```
+
+Streams Gateway events live. Use it first when the bot does not connect or reply. Do not share log excerpts that contain private account links or credentials.
+
+## Current provider configuration
+
+Models are configured as a **Gemini primary + 7-tier fallback chain** in `shared\hermes_home\config.yaml`:
+
+1. **Gemini** (primary, native API): `gemini-3.6-flash` — uses `GEMINI_API_KEY` from `shared\hermes_home\.env`. Until the key is set, Hermes automatically skips to the free tiers below (verified: fallback entries without keys are skipped).
+2. **Nous Portal free #1**: `upstage/solar-pro4:free` — 524K context, best for long agentic runs (verified: replied in ~9.6s through the real Telegram fallback test).
+3. **Nous Portal free #2**: `tencent/hy3:free` — 295B MoE, 262K context, agentic/tool workflows (verified: ~6.1s).
+4. **Nous Portal free #3**: `stepfun/step-3.7-flash:free` — multimodal + reasoning (verified: ~7.8s).
+5. **OpenRouter free**: `nvidia/nemotron-3-ultra-550b-a55b:free` — 1M context, frontier reasoning.
+6. **OpenRouter free**: `nvidia/nemotron-3-super-120b-a12b:free`.
+7. **LM Studio on the work PC** (via Tailscale): `qwen/qwen3.5-9b` as `provider: custom` at `http://100.77.88.33:1234/v1` (entry `lmstudio-work` in `custom_providers`) — requires the work machine's LM Studio server to be running (auto-start: `shared\tools\work-lmstudio-autostart.ps1`).
+8. **LM Studio on this machine** (last resort): `qwen/qwen3-1.7b` at `http://127.0.0.1:1234/v1` — LM Studio needs no API key (Hermes auto-uses a no-auth placeholder).
+
+**Notes on the local tiers (⑦⑧):** ⚠️ The fallback path does **not** recognize `provider: ollama` — use **`provider: custom`** + `base_url` for the work PC instead (verified: replies in ~28s via LM Studio over Tailscale). Both local `custom_providers` entries set `context_length` (65536 for the work qwen3.5-9b, 32768 for this machine's qwen3-1.7b) so they clear the Hermes 64K floor; `auxiliary.compression` points at the **free OpenRouter** model since compression has no bypass and needs ≥64K. ⚠️ **After any LM Studio restart the model reloads at the default 8192 context** — reload at the configured size with the bundled CLI: `lms load qwen/qwen3-1.7b -c 32768 -y` (check with `lms ps`), or set the Context Length in the LM Studio GUI; otherwise Hermes hits `Context length exceeded` on long prompts. ⚠️ Both local models are small: Qwen3-1.7b is a **slow reasoning model** (5–10 min/turn on long prompts) — treat tiers ⑦⑧ as emergency fallbacks only, not for daily work.
+
+> 💡 Nous Portal free models only work via the `nous` provider (OAuth login once: `hermes auth add nous`); paid models (e.g. `anthropic/claude-sonnet-4.6`) return `requires credits` until you top up at portal.nousresearch.com.
+
+Change them in `shared\hermes_home\config.yaml` only after verifying model availability at `https://openrouter.ai/api/v1/models` (Nous: `inference-api.nousresearch.com/v1/models`).
+
+## Current scope and next integrations
+
+**Working now, 100% free:** product workspaces, the two-phase build → review → publish flow, per-platform publishing tracking, promo scripts, promo videos (ffmpeg) with Thai/English voiceover (edge-tts), auto-downloaded product photos, and the full button-driven Telegram flow.
+
+**Still placeholders (need real adapters/keys):** Shopee product search (awaiting Affiliate API keys + whitelist), live posting to YouTube/TikTok/Facebook, and EPUB/PDF publishing. Add and test one integration at a time, starting with the Shopee Affiliate API so researched product data flows in automatically.

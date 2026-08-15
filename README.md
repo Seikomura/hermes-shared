@@ -38,11 +38,23 @@ hermes-shared/
 │   ├── hidden-runner.vbs           #   รัน .ps1 แบบไร้หน้าต่าง (กัน terminal เด้ง)
 │   ├── check-secrets.ps1           #   สแกน secret ก่อน commit (กัน key หลุด)
 │   └── install-*.ps1               #   (ตัวเก่า) ลง task ทีละตัว
+│   # ── เพิ่มจากเครื่องบ้าน (ระบบ gateway แบบ bat-watchdog + autostart ฝั่งเครื่องทำงาน) ──
+│   ├── start_gateway.bat           #   ตัวหลัก: watchdog loop รัน hermes gateway (restart อัตโนมัติเมื่อ crash)
+│   ├── stop_gateway.bat            #   หยุด gateway แบบสะอาด (ไม่ให้ watchdog ขึ้นใหม่)
+│   ├── start_gateway_hidden.vbs    #   wrapper รัน start_gateway.bat แบบไร้หน้าต่าง
+│   ├── register_gateway_task.ps1   #   ลง task AI_Factory_Gateway (เปิดตอน login)
+│   ├── watchdog_notify.py          #   แจ้ง Telegram ทุกครั้งที่ gateway ตาย (อ่าน token จาก .env)
+│   └── work-lmstudio-autostart.ps1 #   เครื่องทำงาน: โหลด qwen3.5-9b + เปิด server bind 0.0.0.0 ตอน login
 └── docs/
-    ├── workthrough.md              # คู่มือแก้ปัญหาครบ (ภาษาไทย)
+    ├── workthrough.md              # คู่มือแก้ปัญหาครบ (ภาษาไทย) — จากเครื่องทำงาน
     ├── README.md                   # README หลักของเครื่องทำงาน
     ├── home-machine-guide.md       # คู่มือ 3 ขั้นตอนสำหรับเครื่องบ้าน (รันสคริปต์ + ทดสอบ + คุย bot)
-    └── freebuff-home-setup.md      # ⭐ คู่มือตั้งค่าเครื่องบ้าน — ให้ Freebuff เครื่องบ้านอ่านก่อนลงมือ
+    ├── freebuff-home-setup.md      # ⭐ คู่มือตั้งค่าเครื่องบ้าน — ให้ Freebuff เครื่องบ้านอ่านก่อนลงมือ
+    # ── เพิ่มจากเครื่องบ้าน (AI Factory manual + fallback chain ล่าสุด) ──
+    ├── ai-factory-workthrough.md   # คู่มือ AI Factory (มี §10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน + §14 Changelog)
+    ├── ai-factory-readme.md        # README ของ AI Factory (fallback chain 7 ชั้น + Nous free models)
+    ├── ai-factory-quick-start.md   # Quick-Start ของ AI Factory
+    └── fallback-ai-setup.md        # สรุป config ไฟนอล + คำสั่งเช็คสถานะ fallback
 ```
 
 ## วิธีใช้ sync.ps1 (ทั้ง 2 เครื่องใช้คำสั่งเดียวกัน)
@@ -62,6 +74,10 @@ powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts   # + ลงสคร
 > สคริปต์จะ copy แบบ **merge** — ลง/ทับเฉพาะสกิลใน repo ไม่ลบสกิล builtin หรือสกิลอื่นในเครื่อง
 > log การทำงาน: `sync.log` (อยู่ข้าง sync.ps1)
 > หมายเหตุ: `install-tasks.ps1` ใช้ได้กับ PS 5.1+ — ถ้าต้องการลง task ทีละตัวใช้ `install-healthcheck-task.ps1` / `install-fallbackwatch-task.ps1` เดิมได้
+> ⚠️ **สคริปต์มี 2 ระบบดูแล gateway ให้เลือกใช้ (อย่าใช้พร้อมกัน 2 ตัว):**
+> 1) **แบบ bat-watchdog** (`start_gateway.bat` + task `AI_Factory_Gateway`) — เครื่องบ้านใช้อยู่: restart เมื่อ process ตาย
+> 2) **แบบ heartbeat** (`gateway-watch.ps1` + task `HermesGatewayWatch`) — เครื่องทำงานใช้อยู่: restart เมื่อ heartbeat ค้าง (ทุก 2 นาที)
+> แต่ละเครื่องเลือกแบบเดียวเพื่อกันการ restart ซ้ำซ้อน
 
 ## วิธี sync จริง (ขั้นตอนปกติ)
 
