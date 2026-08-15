@@ -64,12 +64,12 @@ python C:\AI_FACTORY\shared\tools\factory_manager.py list
 
 | # | Provider | โมเดล | หมายเหตุ |
 |---|---|---|---|
-| ① | **Gemini** (หลัก) | `gemini-3.6-flash` | ใส่ `GEMINI_API_KEY` ใน .env |
-| ② | Nous Portal (ฟรี) | `upstage/solar-pro4:free` | 524K context — เหมาะงานยาว |
-| ③ | Nous Portal (ฟรี) | `tencent/hy3:free` | 295B, agentic |
-| ④ | Nous Portal (ฟรี) | `stepfun/step-3.7-flash:free` | multimodal |
-| ⑤ | OpenRouter (ฟรี) | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1M context |
-| ⑥ | OpenRouter (ฟรี) | `nvidia/nemotron-3-super-120b-a12b:free` | |
+| ① | **OpenRouter** (หลัก, ฟรี) | `nvidia/nemotron-3.5-lightning:free` | 1M ctx, reasoning — รุ่นใหม่สุด |
+| ② | OpenRouter (ฟรี) | `nvidia/nemotron-3-ultra-550b-a55b:free` | 550B, 1M ctx |
+| ③ | Nous Portal (ฟรี) | `upstage/solar-pro4:free` | 524K context — เหมาะงานยาว |
+| ④ | Nous Portal (ฟรี) | `tencent/hy3:free` | 295B, agentic |
+| ⑤ | Nous Portal (ฟรี) | `stepfun/step-3.7-flash:free` | multimodal |
+| ⑥ | Gemini | `gemini-3.6-flash` | ใส่ `GEMINI_API_KEY` ใน .env |
 | ⑦ | LM Studio เครื่องทำงาน (Tailscale) | `qwen/qwen3.5-9b` | ต้องเปิด server ที่เครื่องทำงาน (`work-lmstudio-autostart.ps1`) |
 | ⑧ | LM Studio เครื่องนี้ (สำรองสุดท้าย) | `qwen/qwen3-1.7b` | เสปคต่ำ — ใช้ยามฉุกเฉินเท่านั้น |
 

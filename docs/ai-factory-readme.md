@@ -130,14 +130,14 @@ Streams Gateway events live. Use it first when the bot does not connect or reply
 
 ## Current provider configuration
 
-Models are configured as a **Gemini primary + 7-tier fallback chain** in `shared\hermes_home\config.yaml`:
+Models are configured as an **OpenRouter primary + 7-tier fallback chain** in `shared\hermes_home\config.yaml`:
 
-1. **Gemini** (primary, native API): `gemini-3.6-flash` — uses `GEMINI_API_KEY` from `shared\hermes_home\.env`. Until the key is set, Hermes automatically skips to the free tiers below (verified: fallback entries without keys are skipped).
-2. **Nous Portal free #1**: `upstage/solar-pro4:free` — 524K context, best for long agentic runs (verified: replied in ~9.6s through the real Telegram fallback test).
-3. **Nous Portal free #2**: `tencent/hy3:free` — 295B MoE, 262K context, agentic/tool workflows (verified: ~6.1s).
-4. **Nous Portal free #3**: `stepfun/step-3.7-flash:free` — multimodal + reasoning (verified: ~7.8s).
-5. **OpenRouter free**: `nvidia/nemotron-3-ultra-550b-a55b:free` — 1M context, frontier reasoning.
-6. **OpenRouter free**: `nvidia/nemotron-3-super-120b-a12b:free`.
+1. **OpenRouter** (primary, free): `nvidia/nemotron-3.5-lightning:free` — 1M context, frontier reasoning, newest model (verified: replied through the real Telegram test with ~13.1s API latency).
+2. **OpenRouter free**: `nvidia/nemotron-3-ultra-550b-a55b:free` — 1M context, frontier reasoning backup.
+3. **Nous Portal free #1**: `upstage/solar-pro4:free` — 524K context, best for long agentic runs (verified: replied in ~9.6s through the real Telegram fallback test).
+4. **Nous Portal free #2**: `tencent/hy3:free` — 295B MoE, 262K context, agentic/tool workflows (verified: ~6.1s).
+5. **Nous Portal free #3**: `stepfun/step-3.7-flash:free` — multimodal + reasoning (verified: ~7.8s).
+6. **Gemini** (native API): `gemini-3.6-flash` — uses `GEMINI_API_KEY` from `shared\hermes_home\.env`. Until the key is set, Hermes automatically skips to the free tiers above (verified: fallback entries without keys are skipped).
 7. **LM Studio on the work PC** (via Tailscale): `qwen/qwen3.5-9b` as `provider: custom` at `http://100.77.88.33:1234/v1` (entry `lmstudio-work` in `custom_providers`) — requires the work machine's LM Studio server to be running (auto-start: `shared\tools\work-lmstudio-autostart.ps1`).
 8. **LM Studio on this machine** (last resort): `qwen/qwen3-1.7b` at `http://127.0.0.1:1234/v1` — LM Studio needs no API key (Hermes auto-uses a no-auth placeholder).
 

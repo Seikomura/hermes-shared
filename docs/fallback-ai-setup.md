@@ -1,7 +1,7 @@
 # Fallback AI Setup — สรุป config + คำสั่งเช็คสถานะ
 
-> เอกสารย่อของระบบ AI แบบหลายชั้น: **Gemini (หลัก) → Nous ฟรี ×3 → OpenRouter ฟรี ×2 → LM Studio เครื่องทำงาน (Tailscale) → LM Studio เครื่องนี้ (สุดท้าย)**
-> Config หลัก: `shared/hermes_home/config.yaml` (วันที่อัปเดตล่าสุด 14 ส.ค. 2026)
+> เอกสารย่อของระบบ AI แบบหลายชั้น: **OpenRouter (หลัก) → Nous ฟรี ×3 → Gemini → LM Studio เครื่องทำงาน (Tailscale) → LM Studio เครื่องนี้ (สุดท้าย)**
+> Config หลัก: `shared/hermes_home/config.yaml` (วันที่อัปเดตล่าสุด 15 ส.ค. 2026)
 > 📎 เอกสารเต็ม: [Workthrough.md](Workthrough.md) (§4 สิ่งที่ต้องเตรียม · **§10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน** · §14 Changelog) · [README.md](README.md) · [Quick-Start.md](Quick-Start.md)
 
 ---
@@ -16,22 +16,22 @@
 
 ---
 
-## 📋 Fallback chain ไฟนอล (7 ชั้น)
+## 📋 Fallback chain ไฟนอล (primary + 7 ชั้น)
 
 | ลำดับ | provider | model | หมายเหตุ |
 |---|---|---|---|
-| Primary | gemini | `gemini-3.6-flash` | หลัก — ทุก turn เริ่มที่ตัวนี้ |
-| 1 | nous | `upstage/solar-pro4:free` | context 524K เหมาะงานยาว |
-| 2 | nous | `tencent/hy3:free` | 295B reasoning + agentic |
-| 3 | nous | `stepfun/step-3.7-flash:free` | multimodal + reasoning |
-| 4 | openrouter | `nvidia/nemotron-3-ultra-550b-a55b:free` | 550B ฟรี |
-| 5 | openrouter | `nvidia/nemotron-3-super-120b-a12b:free` | 120B ฟรี |
+| Primary | openrouter | `nvidia/nemotron-3.5-lightning:free` | หลัก — ทุก turn เริ่มที่ตัวนี้ (1M ctx, reasoning) |
+| 1 | openrouter | `nvidia/nemotron-3-ultra-550b-a55b:free` | 550B ฟรี, 1M ctx |
+| 2 | nous | `upstage/solar-pro4:free` | context 524K เหมาะงานยาว |
+| 3 | nous | `tencent/hy3:free` | 295B reasoning + agentic |
+| 4 | nous | `stepfun/step-3.7-flash:free` | multimodal + reasoning |
+| 5 | gemini | `gemini-3.6-flash` | AI Studio — ใช้ `GEMINI_API_KEY` |
 | 6 | custom | `qwen/qwen3.5-9b` @ `100.77.88.33:1234` | LM Studio เครื่องทำงาน (Tailscale) |
 | 7 | lmstudio | `qwen/qwen3-1.7b` @ `127.0.0.1:1234` | **เครื่องนี้ — อันดับสุดท้าย** |
 
 - `auxiliary.compression` ใช้ OpenRouter ฟรี (context 1M) — ไม่แตะ
 - `custom_providers`: `lmstudio-work` (งาน, 64K) + `lmstudio-local` (เครื่องนี้, 32K)
-- fallback เป็นแบบ **per-turn** — ทุกข้อความใหม่เริ่มที่ gemini ก่อนเสมอ
+- fallback เป็นแบบ **per-turn** — ทุกข้อความใหม่เริ่มที่ OpenRouter lightning ก่อนเสมอ
 
 ---
 
