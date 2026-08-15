@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 15 สิงหาคม 2026 (v4 — OpenRouter primary + fix Telegram proxy; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 15 สิงหาคม 2026 (v5 — orchestration chain 14 ระดับ; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -172,10 +172,10 @@ C:\AI_FACTORY
 | **Telegram Bot Token** *(optional)* | ใส่ใน `shared\hermes_home\.env` ถ้าจะใช้ bot |
 | **Keys เฉพาะโรงงาน** *(optional)* | ใส่ใน `factories\<id>\.env` เฉพาะที่จำเป็น |
 
-> **Model 8 ระดับ** (ดู/แก้ใน `shared\hermes_home\config.yaml`): ① **OpenRouter ฟรี (primary)** `nvidia/nemotron-3.5-lightning:free` (1M context, reasoning — รุ่นใหม่สุด; ใช้ `OPENROUTER_API_KEY`) → ② **OpenRouter ฟรี** `nvidia/nemotron-3-ultra-550b-a55b:free` (550B, 1M context) → ③ **Nous Portal ฟรี** `upstage/solar-pro4:free` (524K context — เหมาะงานยาว) → ④ **Nous Portal ฟรี** `tencent/hy3:free` (295B MoE, 262K, agentic) → ⑤ **Nous Portal ฟรี** `stepfun/step-3.7-flash:free` (multimodal) → ⑥ **Gemini** `gemini-3.6-flash` (ใส่ `GEMINI_API_KEY` ใน `shared\hermes_home\.env`; ยังไม่ใส่ Hermes จะข้ามไปชั้นถัดไปอัตโนมัติ) → ⑦ **LM Studio เครื่องทำงาน** `qwen/qwen3.5-9b` (`provider: custom` + `base_url: http://100.77.88.33:1234/v1` — ผ่าน Tailscale; ต้องเปิด LM Studio server บนเครื่องทำงานก่อน: `work-lmstudio-autostart.ps1`) → ⑧ **LM Studio เครื่องนี้** `qwen/qwen3-1.7b` (`base_url: http://127.0.0.1:1234/v1`) — ตรวจสอบรายชื่อโมเดลได้ที่ [OpenRouter models](https://openrouter.ai/api/v1/models) / Nous: `inference-api.nousresearch.com/v1/models` ก่อนเปลี่ยน
+> **Model 14 ระดับ** (ดู/แก้ใน `shared\hermes_home\config.yaml` — orchestration-first): ① **OpenRouter ฟรี (primary)** `nvidia/nemotron-3-ultra-550b-a55b:free` (550B, 1M context — จุดเด่น: **agent orchestration**; ใช้ `OPENROUTER_API_KEY`) → ② **OpenRouter ฟรี** `nvidia/nemotron-3.5-lightning:free` (1M context, reasoning — รุ่นใหม่สุด) → ③ **OpenRouter ฟรี** `poolside/laguna-s-2.1:free` (agentic coding, Terminal-Bench 70.2%) → ④ **OpenRouter ฟรี** `nvidia/nemotron-3-super-120b-a12b:free` (MTP, accuracy สูง) → ⑤ **OpenRouter ฟรี** `cohere/north-mini-code:free` (JSON schema tool use) → ⑥ **OpenRouter ฟรี** `openai/gpt-oss-20b:free` (function calling, structured outputs) → ⑦ **OpenRouter ฟรี** `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` (multimodal ภาพ/วิดีโอ/เสียง) → ⑧ **OpenRouter ฟรี** `google/gemma-4-26b-a4b-it:free` (native function calling) → ⑨ **Nous Portal ฟรี** `upstage/solar-pro4:free` (524K context — เหมาะงานยาว) → ⑩ **Nous Portal ฟรี** `tencent/hy3:free` (295B MoE, 262K, agentic) → ⑪ **Nous Portal ฟรี** `stepfun/step-3.7-flash:free` (multimodal) → ⑫ **Gemini** `gemini-3.6-flash` (ใส่ `GEMINI_API_KEY` ใน `shared\hermes_home\.env`; ยังไม่ใส่ Hermes จะข้ามไปชั้นถัดไปอัตโนมัติ) → ⑬ **LM Studio เครื่องทำงาน** `qwen/qwen3.5-9b` (`provider: custom` + `base_url: http://100.77.88.33:1234/v1` — ผ่าน Tailscale; ต้องเปิด LM Studio server บนเครื่องทำงานก่อน: `work-lmstudio-autostart.ps1`) → ⑭ **LM Studio เครื่องนี้** `qwen/qwen3-1.7b` (`base_url: http://127.0.0.1:1234/v1`) — ตรวจสอบรายชื่อโมเดลได้ที่ [OpenRouter models](https://openrouter.ai/api/v1/models) / Nous: `inference-api.nousresearch.com/v1/models` ก่อนเปลี่ยน
 >
-> **หมายเหตุ ⑦ LM Studio เครื่องทำงาน — `qwen/qwen3.5-9b`:** ผ่าน Tailscale ที่ `100.77.88.33:1234` (เดิมเป็น Ollama `qwen3:8b` ที่ `:11434` — ย้ายมาใช้ LM Studio แล้ว) — ⚠️ **ต้องใช้ `provider: custom`** + ระบุ `base_url` ตรงๆ (fallback path ของ Hermes **ไม่รู้จัก `provider: ollama`** — จะ error `Fallback to ollama failed: provider not configured`; แต่ `custom` + `base_url` ทำงานได้ — ทดสอบแล้ว ตอบจริง ~28s) และตั้ง `context_length: 65536` ใน `custom_providers` ต่อโมเดล (ผ่านเกณฑ์ 64K ของ Hermes) — `auxiliary.compression` ใช้ **OpenRouter ฟรี** แทน (งานบีบอัด context ต้อง ≥64K) — เปิด server อัตโนมัติตอน login ที่เครื่องทำงาน: `shared\tools\work-lmstudio-autostart.ps1`
-> - **⚠️ สำคัญ — หลังรีสตาร์ท LM Studio (⑧):** โมเดลจะโหลดกลับที่ context **8192 (ค่า default)** ไม่ใช่ 32K → ต้องโหลดใหม่ด้วย 32K ก่อนใช้เป็น fallback ไม่งั้น Hermes จะเจอ `Context length exceeded` สำหรับ prompt ยาว — **วิธีที่เร็วที่สุด (ใช้ `lms` CLI ที่มากับ LM Studio):** `lms load qwen/qwen3-1.7b -c 32768 -y` (ตรวจผลด้วย `lms ps`) หรือเปิด LM Studio GUI → คลิกโมเดล → ตั้ง Context Length = 32768 → โหลดใหม่ (ค่านี้จำต่อโมเดล)
+> **หมายเหตุ ⑬ LM Studio เครื่องทำงาน — `qwen/qwen3.5-9b`:** ผ่าน Tailscale ที่ `100.77.88.33:1234` (เดิมเป็น Ollama `qwen3:8b` ที่ `:11434` — ย้ายมาใช้ LM Studio แล้ว) — ⚠️ **ต้องใช้ `provider: custom`** + ระบุ `base_url` ตรงๆ (fallback path ของ Hermes **ไม่รู้จัก `provider: ollama`** — จะ error `Fallback to ollama failed: provider not configured`; แต่ `custom` + `base_url` ทำงานได้ — ทดสอบแล้ว ตอบจริง ~28s) และตั้ง `context_length: 65536` ใน `custom_providers` ต่อโมเดล (ผ่านเกณฑ์ 64K ของ Hermes) — `auxiliary.compression` ใช้ **OpenRouter ฟรี** แทน (งานบีบอัด context ต้อง ≥64K) — เปิด server อัตโนมัติตอน login ที่เครื่องทำงาน: `shared\tools\work-lmstudio-autostart.ps1`
+> - **⚠️ สำคัญ — หลังรีสตาร์ท LM Studio (⑭):** โมเดลจะโหลดกลับที่ context **8192 (ค่า default)** ไม่ใช่ 32K → ต้องโหลดใหม่ด้วย 32K ก่อนใช้เป็น fallback ไม่งั้น Hermes จะเจอ `Context length exceeded` สำหรับ prompt ยาว — **วิธีที่เร็วที่สุด (ใช้ `lms` CLI ที่มากับ LM Studio):** `lms load qwen/qwen3-1.7b -c 32768 -y` (ตรวจผลด้วย `lms ps`) หรือเปิด LM Studio GUI → คลิกโมเดล → ตั้ง Context Length = 32768 → โหลดใหม่ (ค่านี้จำต่อโมเดล)
 > - **ℹ️ เวอร์ชัน LM Studio:** 0.4.20 คือ **เวอร์ชันล่าสุด** (ตรวจแล้ว: เว็บ lmstudio.ai + winget ตรงกัน ณ ส.ค. 2026 — ไม่มีเวอร์ชันใหม่กว่า); API ของ 0.4.20 **ยังไม่รองรับการปิด reasoning ผ่านคำสั่ง** (ต้องปิดใน GUI: คลิกโมเดล → Reasoning: off → โหลดใหม่)
 
 ---
@@ -211,9 +211,9 @@ $hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.ex
 
 > 💡 แนะนำ: ถ้าขี้เกียจพิมพ์ซ้ำ เก็บ 3 บรรทัดนี้ไว้ใน PowerShell Profile หรือไฟล์ `.ps1` แล้ว `.` source ตอนเปิด
 
-### 5.3 ตั้งค่า Gemini API (เมื่อได้ key แล้ว) — fallback ระดับ ⑥
+### 5.3 ตั้งค่า Gemini API (เมื่อได้ key แล้ว) — fallback ระดับ ⑫
 
-`config.yaml` ตั้งเป็น **8 ระดับ** ไว้แล้ว (OpenRouter `nemotron-3.5-lightning:free` (primary) → `nemotron-3-ultra-550b-a55b:free` → Nous Portal ฟรี × 3 → `gemini-3.6-flash` → LM Studio เครื่องทำงาน → LM Studio เครื่องนี้) — เพิ่ม key `GEMINI_API_KEY` เพื่อเปิดใช้งานชั้น Gemini:
+`config.yaml` ตั้งเป็น **14 ระดับ** ไว้แล้ว (OpenRouter `nemotron-3-ultra-550b-a55b:free` (primary, orchestration) → `nemotron-3.5-lightning:free` → `laguna-s-2.1:free` → `nemotron-3-super-120b-a12b:free` → `north-mini-code:free` → `gpt-oss-20b:free` → `nano-omni-30b-a3b-reasoning:free` → `gemma-4-26b-a4b-it:free` → Nous Portal ฟรี × 3 → `gemini-3.6-flash` → LM Studio เครื่องทำงาน → LM Studio เครื่องนี้) — เพิ่ม key `GEMINI_API_KEY` เพื่อเปิดใช้งานชั้น Gemini (⑫):
 
 1. เปิดไฟล์ `C:\AI_FACTORY\shared\hermes_home\.env` แล้วเพิ่มบรรทัด (key จาก https://aistudio.google.com/apikey):
    ```
@@ -224,9 +224,9 @@ $hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.ex
 **วิธีเช็คว่า Hermes ใช้ primary (OpenRouter) จริงไหม:**
 
 - **วิธี A (แม่นสุด):** เปิด `& $hermes` แล้วดูบรรทัดแรกตอนเริ่ม session:
-  - `🤖 AI Agent initialized with model: nvidia/nemotron-3.5-lightning:free` → ✅ ใช้ primary (OpenRouter)
+  - `🤖 AI Agent initialized with model: nvidia/nemotron-3-ultra-550b-a55b:free` → ✅ ใช้ primary (OpenRouter)
   - `🔄 Fallback model: <model> (<provider>)` → กำลังใช้ตัวสำรอง (ดู troubleshooting ข้อ 13)
-- **วิธี B:** พิมพ์ `/status` ใน session → บรรทัด `Model: nvidia/nemotron-3.5-lightning:free (openrouter)` → ✅ primary (ถ้าขึ้น provider อื่น = กำลังใช้ fallback)
+- **วิธี B:** พิมพ์ `/status` ใน session → บรรทัด `Model: nvidia/nemotron-3-ultra-550b-a55b:free (openrouter)` → ✅ primary (ถ้าขึ้น provider อื่น = กำลังใช้ fallback)
 
 **ถ้า `gemini-3.6-flash` ใช้ไม่ได้ (error 404 / model not found):**
 
@@ -671,12 +671,12 @@ Get-Content C:\AI_FACTORY\logs\errors\errors.jsonl       # ประวัติ
 ### 10.4 ดูว่า Hermes ใช้ model ตัวไหนอยู่
 
 - **ตอนเริ่ม session (terminal):** บรรทัด `🤖 AI Agent initialized with model: <model>` = ตัวที่ใช้จริง; ถ้าถูก fallback จะเห็น `🔄 Fallback model: <model> (<provider>)`
-- **ระหว่าง session:** พิมพ์ `/status` → บรรทัด `Model: <model> (<provider>)` (เช่น `nvidia/nemotron-3.5-lightning:free (openrouter)` = primary, `gemini-3.6-flash (gemini)` = fallback ชั้น ⑥)
+- **ระหว่าง session:** พิมพ์ `/status` → บรรทัด `Model: <model> (<provider>)` (เช่น `nvidia/nemotron-3-ultra-550b-a55b:free (openrouter)` = primary, `gemini-3.6-flash (gemini)` = fallback ชั้น ⑫)
 - ใช้ 2 จุดนี้เช็คก่อนเสมอ ถ้าสงสัยว่าระบบใช้ model ไหนอยู่
 
 ### 10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน (fallback)
 
-เมื่อชั้นหลัก (`nvidia/nemotron-3.5-lightning:free` ผ่าน openrouter — ชั้น ①) ใช้ไม่ได้ ระบบจะไล่ fallback ตามลำดับใน `config.yaml` — ดูจาก `agent.log` ว่า turn ไหนตอบด้วยโมเดล/provider ตัวไหนจริง:
+เมื่อชั้นหลัก (`nvidia/nemotron-3-ultra-550b-a55b:free` ผ่าน openrouter — ชั้น ①) ใช้ไม่ได้ ระบบจะไล่ fallback ตามลำดับใน `config.yaml` — ดูจาก `agent.log` ว่า turn ไหนตอบด้วยโมเดล/provider ตัวไหนจริง:
 
 **วิธีที่ 1 — ดู `agent.log` (แม่นสุด):**
 
@@ -689,7 +689,7 @@ Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-St
 ```
 turn: session=20260809_184342_c31a0899 model=upstage/solar-pro4:free provider=nous platform=telegram
 API call #1: model=upstage/solar-pro4:free provider=nous in=25196 out=85 total=25281 latency=9.6s
-Fallback activated: nvidia/nemotron-3.5-lightning:free → nvidia/nemotron-3-ultra-550b-a55b:free (openrouter)
+Fallback activated: nvidia/nemotron-3-ultra-550b-a55b:free → nvidia/nemotron-3.5-lightning:free (openrouter)
 provider=custom base_url=http://100.77.88.33:1234/v1/ model=qwen/qwen3.5-9b
 ```
 
@@ -698,7 +698,7 @@ provider=custom base_url=http://100.77.88.33:1234/v1/ model=qwen/qwen3.5-9b
 | `turn: ... model=X provider=Y platform=telegram` | turn นี้ใช้โมเดล/provider ไหน (Y = `gemini` / `nous` / `openrouter` / `custom` / `lmstudio`) |
 | `API call #1: model=X provider=Y ... latency=Zs` | เรียก API จริงไปตัวไหน + ใช้เวลากี่วิ |
 | `Fallback activated: A → B (provider)` | ชั้น A ล้ม กำลังสลับไปชั้น B |
-| `provider=custom base_url=http://100.77.88.33:1234/v1` | **ตอบผ่านเครื่องทำงาน (ชั้น ⑦)** — grep เฉพาะได้: |
+| `provider=custom base_url=http://100.77.88.33:1234/v1` | **ตอบผ่านเครื่องทำงาน (ชั้น ⑬)** — grep เฉพาะได้: |
 
 ```powershell
 Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-String "100.77.88.33:1234"
@@ -710,15 +710,15 @@ Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-St
 & $hermes fallback list
 ```
 
-ควรเห็น primary (`openrouter`: `nvidia/nemotron-3.5-lightning:free`) + fallback 7 ชั้น ตรงกับ config: `openrouter` (`nemotron-3-ultra-550b-a55b:free`) → `nous` × 3 (`solar-pro4:free` → `hy3:free` → `stepfun:free`) → `gemini` (`gemini-3.6-flash`) → `custom` (`qwen/qwen3.5-9b` @ `100.77.88.33:1234`) → `lmstudio` (`qwen/qwen3-1.7b`) — ถ้าลำดับ/โมเดลไม่ตรง config ให้รีสตาร์ท Hermes/Gateway (แก้ config แล้วต้อง restart เสมอ)
+ควรเห็น primary (`openrouter`: `nvidia/nemotron-3-ultra-550b-a55b:free`) + fallback 13 ชั้น ตรงกับ config: `openrouter` × 7 (`nemotron-3.5-lightning:free` → `laguna-s-2.1:free` → `nemotron-3-super-120b-a12b:free` → `north-mini-code:free` → `gpt-oss-20b:free` → `nano-omni-30b-a3b-reasoning:free` → `gemma-4-26b-a4b-it:free`) → `nous` × 3 (`solar-pro4:free` → `hy3:free` → `stepfun:free`) → `gemini` (`gemini-3.6-flash`) → `custom` (`qwen/qwen3.5-9b` @ `100.77.88.33:1234`) → `lmstudio` (`qwen/qwen3-1.7b`) — ถ้าลำดับ/โมเดลไม่ตรง config ให้รีสตาร์ท Hermes/Gateway (แก้ config แล้วต้อง restart เสมอ)
 
 **วิธีที่ 3 — ทดสอบชั้นใดชั้นหนึ่งตรงๆ (ไม่ผ่าน chain):**
 
 ```powershell
-# ทดสอบ Nous ฟรี (ชั้น ③-⑤)
+# ทดสอบ Nous ฟรี (ชั้น ⑨-⑪)
 & $hermes chat -q "ตอบว่า OK เท่านั้น" -Q --provider nous -m upstage/solar-pro4:free --max-turns 2
 
-# ทดสอบเครื่องทำงานผ่าน Tailscale (ชั้น ⑦)
+# ทดสอบเครื่องทำงานผ่าน Tailscale (ชั้น ⑬)
 & $hermes chat -q "ตอบว่า OK เท่านั้น" -Q --provider lmstudio-work -m qwen/qwen3.5-9b --max-turns 2
 ```
 
@@ -831,7 +831,7 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 | LM Studio `Context length exceeded` หลังเคยทำงานได้ | รีสตาร์ท LM Studio แล้วโมเดลโหลดกลับที่ context 8192 (default) | โหลดใหม่ด้วย 32K: `lms load qwen/qwen3-1.7b -c 32768 -y` (หรือตั้ง GUI: คลิกโมเดล → Context Length = **32768** → โหลดใหม่) แล้วลองใหม่ |
 | ปุ่มไม่ขึ้นใน Telegram | Hermes ยังไม่ได้โหลด skill ใหม่ หรือ clarify tool ไม่ว่าง | รีสตาร์ท Hermes; เช็คว่า default toolset มี clarify |
 | ชื่อสินค้าไทย/Unicode ใช้ได้ไหม | ได้ — slug รองรับ Unicode | เช็ค path ใน JSON output อย่าใช้ path ที่ผิดพลาด |
-| ไม่เห็น Gemini ถูกใช้ (ปกติ primary = openrouter lightning; gemini เป็นชั้น ⑥ — จะใช้เมื่อชั้น ①-⑤ ล้ม) | ยังไม่ใส่ `GEMINI_API_KEY` หรือ key ผิด/ถูก revoke | ตรวจ `shared\hermes_home\.env` มี `GEMINI_API_KEY=AIza...` ถูกต้อง → รีสตาร์ท Hermes (ดูหัวข้อ 5.3) |
+| ไม่เห็น Gemini ถูกใช้ (ปกติ primary = openrouter ultra; gemini เป็นชั้น ⑫ — จะใช้เมื่อชั้น ①-⑪ ล้ม) | ยังไม่ใส่ `GEMINI_API_KEY` หรือ key ผิด/ถูก revoke | ตรวจ `shared\hermes_home\.env` มี `GEMINI_API_KEY=AIza...` ถูกต้อง → รีสตาร์ท Hermes (ดูหัวข้อ 5.3) |
 | เปิด Hermes แล้วขึ้น `No inference provider is configured yet` + ถาม `Set up a provider now?` | ยังไม่มี key ของ provider ไหนเลย (primary = OpenRouter ต้องมี `OPENROUTER_API_KEY` ใน .env) — Hermes ตรวจ primary ก่อน | พิมพ์ `n` เพื่อข้าม → ระบบใช้ provider ฟรีที่เหลือต่อได้ตามปกติ (fallback); พอใส่ key แล้วจะไม่ขึ้นอีก (ดูหัวข้อ 5.3) |
 | `-z`/`--oneshot` error `No usable credentials found for provider ...` | โหมด one-shot ไม่ผ่าน fallback chain (ต่างจากโหมดคุยปกติ) — ใช้ primary โดยตรง | ตรวจว่า `OPENROUTER_API_KEY` อยู่ใน .env หรือ override: `& $hermes -z "<prompt>" --provider openrouter -m "nvidia/nemotron-3-ultra-550b-a55b:free"` |
 | `gemini-3.6-flash` error (404 / model not found) | model id ไม่ตรงกับที่ Google เปิดให้บัญชีนี้ | แก้ `config.yaml` → `default: gemini-2.5-flash` (หรือ `gemini-3-flash`) หรือรัน `& $hermes model` เลือกใหม่ |
@@ -839,6 +839,13 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v5 — 15 ส.ค. 2026 (orchestration chain 14 ระดับ)
+
+- **Hermes = agent orchestration:** primary เปลี่ยนจาก Lightning → **Nemotron 3 Ultra** (550B, 1M ctx — จุดเด่น: agent orchestration); chain ขยายเป็น **primary + 13 fallback** จาก OpenRouter free list: lightning → laguna-s-2.1 (agentic coding) → super-120b (MTP/accuracy) → north-mini-code (JSON tool use) → gpt-oss-20b (function calling) → nano-omni (multimodal) → gemma-4-26b (function calling) → Nous ×3 → gemini → LM Studio เครื่องทำงาน → LM Studio เครื่องนี้
+- **ทดสอบโมเดลใหม่จริงผ่าน OpenRouter API:** laguna / super / cohere / gpt-oss / nano-omni / gemma — ตอบได้ครบ (gemma เจอ 429 ชั่วคราว → retry ผ่าน)
+- **ระบบ self-heal พิสูจน์จริง:** network ไป Telegram หลุด ~2 นาที → gateway retry + reconnect ผ่าน proxy เอง (ไม่มี watchdog ฆ่า)
+- **docs ซิงก์ chain ใหม่:** README · Quick-Start · FALLBACK-AI-SETUP · Workthrough + copy ใน hermes-shared (push แล้ว)
 
 ### v4 — 15 ส.ค. 2026 (reorder chain + fix Telegram proxy)
 

@@ -60,18 +60,24 @@ python C:\AI_FACTORY\shared\tools\factory_manager.py list
 
 ## 🧠 AI ตอบด้วยโมเดลไหน (fallback chain)
 
-`shared\hermes_home\config.yaml` ตั้งไว้แล้ว **8 ระดับ** — ลำดับแรกที่ใช้ได้จะถูกใช้ (เรียงตามประสิทธิภาพ ตัวดีที่สุดมาก่อน):
+`shared\hermes_home\config.yaml` ตั้งไว้แล้ว **14 ระดับ** (orchestration-first) — ลำดับแรกที่ใช้ได้จะถูกใช้ (เรียงตามประสิทธิภาพ ตัวดีที่สุดมาก่อน):
 
 | # | Provider | โมเดล | หมายเหตุ |
 |---|---|---|---|
-| ① | **OpenRouter** (หลัก, ฟรี) | `nvidia/nemotron-3.5-lightning:free` | 1M ctx, reasoning — รุ่นใหม่สุด |
-| ② | OpenRouter (ฟรี) | `nvidia/nemotron-3-ultra-550b-a55b:free` | 550B, 1M ctx |
-| ③ | Nous Portal (ฟรี) | `upstage/solar-pro4:free` | 524K context — เหมาะงานยาว |
-| ④ | Nous Portal (ฟรี) | `tencent/hy3:free` | 295B, agentic |
-| ⑤ | Nous Portal (ฟรี) | `stepfun/step-3.7-flash:free` | multimodal |
-| ⑥ | Gemini | `gemini-3.6-flash` | ใส่ `GEMINI_API_KEY` ใน .env |
-| ⑦ | LM Studio เครื่องทำงาน (Tailscale) | `qwen/qwen3.5-9b` | ต้องเปิด server ที่เครื่องทำงาน (`work-lmstudio-autostart.ps1`) |
-| ⑧ | LM Studio เครื่องนี้ (สำรองสุดท้าย) | `qwen/qwen3-1.7b` | เสปคต่ำ — ใช้ยามฉุกเฉินเท่านั้น |
+| ① | **OpenRouter** (หลัก, ฟรี) | `nvidia/nemotron-3-ultra-550b-a55b:free` | 🎯 **agent orchestration** (550B, 1M ctx) |
+| ② | OpenRouter (ฟรี) | `nvidia/nemotron-3.5-lightning:free` | 1M ctx, reasoning — รุ่นใหม่สุด |
+| ③ | OpenRouter (ฟรี) | `poolside/laguna-s-2.1:free` | agentic coding (Terminal-Bench 70.2%) |
+| ④ | OpenRouter (ฟรี) | `nvidia/nemotron-3-super-120b-a12b:free` | MTP, accuracy สูง (AIME/SWE-Bench) |
+| ⑤ | OpenRouter (ฟรี) | `cohere/north-mini-code:free` | JSON schema tool use |
+| ⑥ | OpenRouter (ฟรี) | `openai/gpt-oss-20b:free` | function calling, structured outputs |
+| ⑦ | OpenRouter (ฟรี) | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | multimodal (ภาพ/วิดีโอ/เสียง) |
+| ⑧ | OpenRouter (ฟรี) | `google/gemma-4-26b-a4b-it:free` | native function calling (บางช่วง 429 จาก Google) |
+| ⑨ | Nous Portal (ฟรี) | `upstage/solar-pro4:free` | 524K context — เหมาะงานยาว |
+| ⑩ | Nous Portal (ฟรี) | `tencent/hy3:free` | 295B, agentic |
+| ⑪ | Nous Portal (ฟรี) | `stepfun/step-3.7-flash:free` | multimodal |
+| ⑫ | Gemini | `gemini-3.6-flash` | ใส่ `GEMINI_API_KEY` ใน .env |
+| ⑬ | LM Studio เครื่องทำงาน (Tailscale) | `qwen/qwen3.5-9b` | ต้องเปิด server ที่เครื่องทำงาน (`work-lmstudio-autostart.ps1`) |
+| ⑭ | LM Studio เครื่องนี้ (สำรองสุดท้าย) | `qwen/qwen3-1.7b` | เสปคต่ำ — ใช้ยามฉุกเฉินเท่านั้น |
 
 - **Nous ใช้ได้เฉพาะโมเดล `:free`** — ตัวเสียเงิน (เช่น `anthropic/claude-sonnet-4.6`) จะ error `requires credits` จนกว่าจะเติมเครดิตที่ portal.nousresearch.com
 - วิธีเช็คว่า bot ตอบผ่านโมเดลไหนจริง: Workthrough §10.4 (ดู `agent.log` grep `100.77.88.33:1234` สำหรับชั้นเครื่องทำงาน)
