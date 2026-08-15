@@ -42,6 +42,9 @@ for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "try { $l = Ge
 if /I "%GW_STATE%"=="RUNNING" exit /b 0
 
 cd /d C:\AI_FACTORY
+REM --- Telegram IPv4 proxy (à¸à¸±à¸™ IPv6 route à¸žà¸±à¸‡à¸‚à¸­à¸‡ ISP - à¸”à¸¹ telegram-ipv4-proxy.py) ---
+set "TELEGRAM_PROXY=http://127.0.0.1:8899"
+powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 8899); $c.Close() } catch { Start-Process -WindowStyle Hidden -FilePath '%PYTHON_EXE%' -ArgumentList 'C:\AI_FACTORY\shared\tools\telegram-ipv4-proxy.py --port 8899 --log C:\AI_FACTORY\shared\hermes_home\logs\telegram-proxy.log' }" >nul 2>&1
 
 set /a FASTFAILS=0
 
