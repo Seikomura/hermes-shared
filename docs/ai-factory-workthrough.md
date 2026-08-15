@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 15 สิงหาคม 2026 (v5 — orchestration chain 14 ระดับ; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 15 สิงหาคม 2026 (v6 — วิดีโอรีวิวตัวแรกผ่าน bot + บทเรียน skill YAML/session reset; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -839,6 +839,14 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v6 — 15 ส.ค. 2026 (วิดีโอรีวิวตัวแรกผ่าน bot + บทเรียน 3 ข้อ)
+
+- **วิดีโอรีวิวสินค้าตัวแรกสร้างสำเร็จผ่าน Telegram (ฟรี 100%):** สั่ง "สร้างวิดีโอโปรโมตสั้นๆ ของหูฟังบลูทูธ" → bot รัน skill `ai-factory` → `factory_manager create/build` → `scripts/script.txt` (จริง) → `video_builder.py` → `videos/promo.mp4` (1280×720, 20 วิ, h264+aac, ใช้รูปจริง 2 ใบ + Ken Burns + พากย์ไทย `th-TH-PremwadeeNeural`) — ไม่ใช้ API key สักตัว (ffmpeg + edge-tts)
+- **บทเรียน ① Skill frontmatter YAML:** description ที่มี `:` (colon+space) กลางประโยค (เช่น "...short videos: build them...") ทำให้ YAML parse ล้ม → fallback → `platforms` กลายเป็น string `'[windows]'` → `skill_matches_platform` ไม่ match → **skill ถูกซ่อนจาก system prompt เงียบๆ** (snapshot เก็บ `description: ""`). **ทางแก้:** ครอบ description ด้วย double-quotes เสมอ; ตรวจด้วย `parse_frontmatter` + ดู snapshot (`grep description .skills_prompt_snapshot.json`)
+- **บทเรียน ② Skill cache 2 ชั้น:** แก้ SKILL.md แล้ว bot ยังไม่เห็น — (1) gateway มี **in-process LRU cache** (ต้อง restart gateway) + (2) **session เก่าเก็บ system prompt เดิมไว้ใน state.db** (restart ก็ไม่ช่วย — ต้องพิมพ์ `/new` ใน Telegram เพื่อสร้าง session ใหม่ → rebuild system prompt + snapshot) — ลำดับ: แก้ไฟล์ → restart gateway (task) → `/new` → snapshot mtime เปลี่ยน + `description` เต็ม → ถึงจะโหลด skill ใหม่
+- **บทเรียน ③ edge-tts ล้มชั่วคราว (NoAudioReceived):** network ฝั่ง Microsoft TTS หลุดๆ (เดียวกับ Telegram) — `video_builder` ตกเป็น `voiceover: skipped` แต่ video ยังสร้างได้ (ไม่มีเสียง) — **ทางแก้:** retry (CLI ตรง 5/5 ผ่าน) แล้ว rebuild — วิดีโอที่ bot สร้างรอบแรกไม่มีเสียง ต้อง rebuild ทับให้ได้เสียงครบ
+- **วิธีสั่ง bot ให้ได้ผลชัวร์:** หลังแก้ skill/ระบบ ควร `/stop` → `/new` → สั่งใหม่ (session เก่าอาจค้าง auto-resume) — `/sethome` ไม่เกี่ยวกับเรื่องนี้ (ใช้ตั้ง home channel สำหรับ cron)
 
 ### v5 — 15 ส.ค. 2026 (orchestration chain 14 ระดับ)
 

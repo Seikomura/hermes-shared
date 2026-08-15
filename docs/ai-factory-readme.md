@@ -62,6 +62,13 @@ $hermes='C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.ex
 - **Script:** `script_writer.py` builds a real promo script (features/price/promo) from `research/` + `source_data/`; exported Shopee data flows straight into it.
 - Build never overwrites real data — placeholder stages only create files that are missing or still placeholders.
 
+**Known lessons (2026-08-15, first real promo.mp4 via the bot):**
+
+- **Always edit skills with a quoted `description`** in the YAML frontmatter. A `:` (colon+space) inside the description silently breaks the YAML parse → the skill is hidden from the system prompt (check `.skills_prompt_snapshot.json` for `"description": ""`).
+- **After editing a skill:** restart the gateway (`schtasks /Run /TN "AI_Factory_Gateway"` after killing the old chain) **and** type `/new` in Telegram — an old session keeps its stored system prompt, so restart alone is not enough.
+- **`edge-tts` fails intermittently** (`NoAudioReceived`, transient network to Microsoft). The video still builds silently; retry the build (e.g. `python shared\tools\video_builder.py --product "<slug>"`) and verify with `ffprobe -select_streams a` that the AAC audio stream is present.
+- **Verified pipeline:** `create → build → script.txt → video_builder.py → videos/promo.mp4` (1280×720, h264+aac, Thai voiceover) — 100% free, no API keys.
+
 ## Commands
 
 > `...` = `python C:\AI_FACTORY\shared\tools\factory_manager.py`
