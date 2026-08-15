@@ -23,6 +23,7 @@ repo (GitHub) = ต้นทาง
 ```
 hermes-shared/
 ├── sync.ps1                        # ⭐ คำสั่งเดียว sync 2 เครื่อง (pull + deploy สกิล + สคริปต์ + tasks)
+├── config.orchestration.example.yaml  # ⭐ template fallback chain orchestration (14 ระดับ) — คัดลอกไป config.yaml (ไม่มี secret)
 ├── skills/                         # สกิล local (builtin 68 ตัวมีครบอยู่แล้ว ไม่ต้องแชร์)
 │   ├── windows-service-management/SKILL.md
 │   └── productivity/hermes-workspace-setup/SKILL.md
@@ -33,6 +34,7 @@ hermes-shared/
 │   ├── lmstudio-start.ps1          #   autostart LM Studio headless
 │   ├── health-check.ps1            #   ตรวจสุขภาพทุก 30 นาที → แจ้ง Telegram
 │   ├── fallback-watch.ps1          #   แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น
+│   ├── model-health-check.py       #   ตรวจโมเดล orchestration 8 ตัว (availability + latency)
 │   ├── home-use-work-local.ps1     #   เครื่องบ้าน: ชี้ local fallback ไป LM Studio เครื่องทำงาน
 │   ├── setup-home-machine.ps1      #   เครื่องบ้าน: ตั้งครบชุด (Nous + LM Studio port)
 │   ├── hidden-runner.vbs           #   รัน .ps1 แบบไร้หน้าต่าง (กัน terminal เด้ง)
@@ -116,6 +118,43 @@ Copy-Item check-secrets.ps1 .git\hooks\pre-commit
 powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts
 hermes skills list
 ```
+
+## 🎯 Fallback chain orchestration (14 ระดับ) — แชร์จากเครื่องบ้าน (15 ส.ค. 2026)
+
+Hermes ตั้งเป็น **agent orchestration**: primary = **Nemotron 3 Ultra** (`nvidia/nemotron-3-ultra-550b-a55b:free` — จุดเด่น: agent orchestration) + fallback 13 ชั้น:
+
+| # | โมเดล | บทบาท |
+|---|---|---|
+| **Primary** | `nvidia/nemotron-3-ultra-550b-a55b:free` | 🎯 agent orchestration (550B, 1M ctx) |
+| 1 | `nvidia/nemotron-3.5-lightning:free` | 1M ctx, reasoning, รุ่นใหม่สุด |
+| 2 | `poolside/laguna-s-2.1:free` | agentic coding (Terminal-Bench 70.2%) |
+| 3 | `nvidia/nemotron-3-super-120b-a12b:free` | MTP, accuracy (AIME/SWE-Bench) |
+| 4 | `cohere/north-mini-code:free` | JSON schema tool use |
+| 5 | `openai/gpt-oss-20b:free` | function calling, structured outputs |
+| 6 | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | multimodal |
+| 7 | `google/gemma-4-26b-a4b-it:free` | native function calling |
+| 8-10 | Nous ฟรี ×3 (`upstage/solar-pro4:free` → `tencent/hy3:free` → `stepfun/step-3.7-flash:free`) | 524K / 295B / multimodal |
+| 11 | `gemini-3.6-flash` (gemini) | AI Studio — ต้องมี `GEMINI_API_KEY` |
+| 12-13 | LM Studio (`qwen/qwen3.5-9b` → `qwen/qwen3-1.7b`) | local สำรอง (ต่อเครื่อง) |
+
+**เครื่องทำงานเอาไปใช้ยังไง (~1 นาที):**
+
+```powershell
+# 1) สำรอง config เดิม
+copy C:\AI Factory\config.yaml C:\AI Factory\config.yaml.bak-<วันนี้>
+# 2) คัดลอก template ไปทับ (ไม่มี secret — key อยู่ใน .env)
+copy config.orchestration.example.yaml C:\AI Factory\config.yaml
+# 3) เปิด config.yaml แล้วปรับชั้น LM Studio ท้ายสุด (⑬⑭) + custom_providers
+#    ให้เป็นของเครื่องตัวเอง (เครื่องทำงาน: qwen/qwen3.5-9b @ 127.0.0.1:1234 — ดูคอมเมนต์ในไฟล์)
+# 4) รีสตาร์ท gateway ผ่าน task ของเครื่อง
+# 5) ตรวจ
+hermes fallback list
+python scripts\model-health-check.py        # ควรเห็น 8/8 OK
+```
+
+> ⚠️ template ไม่มี secret — key ทั้งหมดอยู่ใน `.env` ของแต่ละเครื่อง (ห้าม push ขึ้น git)
+> 💡 ไม่อยากได้ชั้นไหน (Nous/Gemini/local) ตัดรายการใน `fallback_providers` ออกได้เลย
+> 📖 รายละเอียด + ตัวอย่าง log จริง: `docs/fallback-ai-setup.md` · `docs/ai-factory-workthrough.md` (§10.5)
 
 ## 🔒 ความปลอดภัย (API key / secret)
 
