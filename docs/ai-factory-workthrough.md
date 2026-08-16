@@ -851,6 +851,10 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 - **ข้อความแจ้ง:** `🐌 Bot ตกถึงชั้นสุดท้าย (LM Studio ⑭ — qwen3-1.7b, CPU-only)! ตอบอาจช้าเป็นนาที หรือเกิน 15 นาทีจนถูกตัด — ถ้าไม่เร่งด่วน รอ/ส่งใหม่ก็ได้` + timestamp + ข้อความที่ user ส่ง
 - **ทดสอบจริง:** baseline (ไม่ส่งย้อนหลัง) ✅ / ส่งจริง `ok=True` ✅ / รันซ้ำไม่ส่งซ้ำ ✅ / syntax PS1 ผ่าน ✅
 - **หมายเหตุ:** alert ทำงานเฉพาะ turn ที่ **เริ่ม** ด้วย lmstudio (มองเห็นตั้งแต่ชั้นแรก) — ไม่ใช่ตอน fallback ระหว่าง turn; ถ้าต้องการจับตอน fallback ระหว่าง turn ต้องดู log API call ที่ provider เปลี่ยน (ยังไม่ได้ทำ — ปกติ hermes fallback ระหว่าง turn เร็วพอ)
+- **⚠️ บั๊ก watcher restart วน (เจอระหว่าง E2E 22:31–23:09 — แก้แล้ว):**
+  - **① 2 กลไก restart แข่งกัน:** `start_gateway.bat` (spawn gateway เอง + คอย restart) กับ `HermesGatewayWatch` (เดิมทำ `schtasks /run`) → 2 bat + 2 gateway เขียน heartbeat ไฟล์เดียวกัน → JSON เพี้ยน → watcher parse ล้ม → restart ซ้ำ วนไม่จบ (restart ทุก 2 นาที 22:31→23:09) — **แก้: watcher ฆ่า gateway ค้างเท่านั้น แล้วปล่อยให้ bat loop ตัวเดียว restart เอง** (ไม่มี task ซ้อน)
+  - **② watcher ฆ่า gateway ที่สด (race condition):** gateway เขียน heartbeat แบบ truncate+write (ไม่ atomic) → watcher อ่านเจอไฟล์ครึ่งเดียว → JSON เพี้ยน → "heartbeat เก่า" ผิด ๆ (log แสดง age ว่างเปล่า) → ฆ่า gateway ที่ทำงานปกติ — **แก้: อ่าน heartbeat แบบ retry 3 ครั้ง (ห่าง 1 วิ) + `$BootGraceSec` 180→300** (RAM เต็ม boot ช้า เขียน heartbeat ครั้งแรกช้า)
+  - **ยืนยัน:** หลังแก้ watcher เงียบ 2 รอบติด (ไม่มี "ฆ่า" ใหม่) + Connected คงเดิม + heartbeat สดต่อเนื่อง ✅ — บทเรียน: ระบบนี้มี 2 กลไกกู้คืนที่**ต้องไม่ชนกัน** (bat loop = restart หลัก / watcher = ฆ่า + self-heal proxy เท่านั้น)
 
 ### v9 — 16 ส.ค. 2026 (ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭ — ผล: เลือกถูก แต่ช้าเกินจริง)
 
