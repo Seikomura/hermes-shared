@@ -115,6 +115,22 @@ if ($gwProcs.Count -gt 0) {
     Add-Check 'Process' 'CRIT' 'ไม่พบ hermes/python gateway process — gateway ไม่รัน!'
 }
 
+# ══════════════════════ 2.5) TELEGRAM IPv4 PROXY ══════════════════════
+# proxy (telegram-ipv4-proxy.py, port 8899) ตาย = Telegram ต่อไม่ได้ทั้งที่ gateway ยังปกติ
+# -> ต้องเช็คทุกครั้ง (ถ้าตาย HealthCheck จะแจ้งเตือน + ระบบอื่น (gateway-watch) จะ start กลับเอง)
+$proxyOk = $false
+try {
+    $pc = New-Object Net.Sockets.TcpClient
+    $pc.Connect('127.0.0.1', 8899)
+    $pc.Close()
+    $proxyOk = $true
+} catch { }
+if ($proxyOk) {
+    Add-Check 'Telegram proxy' 'OK' 'port 8899 ฟังอยู่ (telegram-ipv4-proxy.py ทำงาน)'
+} else {
+    Add-Check 'Telegram proxy' 'CRIT' 'port 8899 ตาย! proxy (telegram-ipv4-proxy.py) ไม่รัน — Telegram จะต่อไม่ได้; gateway-watch จะ start กลับเองภายใน 2 นาที'
+}
+
 # ══════════════════════ 3) GATEWAY LOG ══════════════════════
 $gwLog = Join-Path $HERMES_HOME 'logs\gateway.log'
 if (Test-Path $gwLog) {
