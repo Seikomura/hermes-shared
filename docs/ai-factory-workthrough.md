@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v7 — กู้ bot เงียบ 5+ ชม. จาก proxy ตาย + กัน double gateway; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v9 — ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭: เลือกชั้นถูก แต่ CPU-only ช้าเกินจริง กับ session context ใหญ่; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -843,6 +843,15 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v9 — 16 ส.ค. 2026 (ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭ — ผล: เลือกถูก แต่ช้าเกินจริง)
+
+- **เป้าหมาย:** ยืนยันว่า bot ตอบผ่านโมเดล 32K (qwen3-1.7b) ของเครื่องนี้ได้จริง เมื่อปิดชั้นบนทั้งหมดชั่วคราว
+- **วิธีบังคับรอบแรก (ผิด — ล้มทันที):** comment `OPENROUTER_API_KEY` + `GEMINI_API_KEY` ใน `.env` + ย้าย `auth.json` ออก แล้ว restart → turn ล้ม `RuntimeError: No LLM provider configured` ตอน init — **บทเรียน: primary ใน `config.yaml` ยังชี้ openrouter แต่ key หาย → hermes init ต้องการ primary ที่มี key ใช้งานได้ → fallback chain ทำงานตอน API call (ระหว่าง turn) ไม่ใช่ตอน init** — วิธีปิดชั้นบนด้วยการเก็บ key ไม่เวิร์ก
+- **วิธีบังคับรอบสอง (ถูก):** กู้คืน `.env`/`auth.json` ครบ + แก้ `config.yaml` ชั่วคราว: `model.provider: lmstudio`, `model.default: qwen/qwen3-1.7b`, `fallback_providers: []` → restart → turn เริ่มผ่าน `provider=lmstudio` จริง (`conversation turn: ... model=qwen/qwen3-1.7b provider=lmstudio` 21:53:10 + `OpenAI client created ... base_url=http://127.0.0.1:1234/v1` 21:55:03)
+- **ผล: เลือกชั้นถูก แต่ตอบไม่ทัน:** llama-server ประมวลผลจริง (CPU เพิ่ม 208→837 ต่อเนื่อง ~11 นาที) แต่ **session เก่ามี context ~31,700 tokens** (คุยกันมาทั้งวัน) + โมเดล 1.7B รัน **CPU-only** (เครื่องนี้ไม่มี GPU) + **RAM เหลือ 0.3GB** (freebuff + chrome กิน) → ประมวลผลนานกว่า 15 นาที → hermes ตัด stream (`Stream stale for 900s (threshold 900s) — no chunks received. Killing connection.` 22:10:04) → fallback ว่าง → ไม่มีคำตอบ
+- **บทเรียน:** ชั้น ⑭ ใช้ได้จริงในแง่ "hermes เลือกถูก + ต่อ LM Studio ได้" แต่เหมาะเป็น **ฉุกเฉินสุดท้าย กับข้อความสั้นๆ (session ยังไม่ยาว) เท่านั้น** — ไม่เหมาะกับ session context ใหญ่บน CPU-only → **ลำดับ fallback ปัจจุบัน (lmstudio เป็นชั้นสุดท้าย) ถูกต้องแล้ว ไม่ต้องแก้**
+- **กู้คืนครบ:** config.yaml เดิม (primary=openrouter + fallback 13 ชั้น) + `.env`/`auth.json` + restart ผ่าน task → `Connected to Telegram` 22:17:21 + heartbeat สด + proxy 8899 ฟัง + `hermes fallback list` ยืนยัน chain 14 ชั้น ✅ (ลบ backup ชั่วคราว lmtest แล้ว)
 
 ### v8 — 16 ส.ค. 2026 (LM Studio โหลดเฉพาะเมื่อจำเป็น — idle-based)
 
