@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 15 สิงหาคม 2026 (v6 — วิดีโอรีวิวตัวแรกผ่าน bot + บทเรียน skill YAML/session reset; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v7 — กู้ bot เงียบ 5+ ชม. จาก proxy ตาย + กัน double gateway; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -138,6 +138,8 @@ C:\AI_FACTORY
 │   ├── tools\script_writer.py          # เขียนสคริปต์โปรโมตจริง (สรรพคุณ/ราคา/โปรโมชัน)
 │   ├── tools\shopee_research.py        # ค้นสินค้า Shopee: extra commission + ความนิยมสูง (ต้องมี keys)
 │   ├── tools\video_builder.py          # ประกอบวิดีโอ + voiceover (ffmpeg + edge-tts, ฟรี 100%)
+│   ├── tools\telegram-ipv4-proxy.py    # local proxy บังคับ IPv4 ไป Telegram (self-heal: probe ก่อน bind)
+│   ├── tools\check-gateway-running.ps1 # ตรวจว่ามี hermes gateway process รันอยู่ไหม (guard กัน double)
 │   └── hermes_home\                    # บ้านของ Hermes Agent
 │       ├── config.yaml                 # ตั้งค่า model + fallback chain (Gemini/Nous/OpenRouter/local)
 │       ├── SOUL.md                     # บุคลิก/บทบาทของ Hermes
@@ -147,6 +149,7 @@ C:\AI_FACTORY
 │       ├── gateway_state.json          # สถานะของ Telegram Gateway
 │       ├── logs\gateway.log            # log ของ Gateway
 │       ├── logs\watchdog.log           # log การ restart อัตโนมัติ (watchdog)
+│       ├── logs\telegram-proxy.log     # log ของ IPv4 proxy (CONNECT แต่ละครั้ง)
 │       ├── logs\notify.log             # ผลการส่งแจ้งเตือน Telegram (watchdog_notify.py)
 │       └── logs\.watchdog_notify_state.json   # สถานะ notify: บรรทัด watchdog.log ที่ส่งแล้ว
 ├── logs\                               # logs ระดับโปรเจกต์
@@ -839,6 +842,20 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v7 — 16 ส.ค. 2026 (กู้ bot เงียบ 5+ ชม. + self-heal proxy / กัน double gateway)
+
+- **อาการ:** bot ไม่ตอบเลยเป็นเวลานาน (18:36+ วน `ConnectError: All connection attempts failed`) — gateway รันอยู่ + heartbeat สด แต่ Telegram ต่อไม่ได้
+- **ต้นตอ ① Proxy ตาย (port 8899):** `telegram-ipv4-proxy.py` (ตัวบังคับ IPv4) ถูก start **แค่ครั้งเดียวตอน bat เริ่ม** — loop watchdog restart เฉพาะ gateway ไม่แตะ proxy → proxy ตายตอน ~13:02 แล้วไม่มีใคร start ใหม่ → bot วน retry ไปเรื่อยๆ 5+ ชม.
+- **ต้นตอ ② Double gateway (ซ้อนหลายตัว):** `HermesGatewayWatch` (ทุก 2 นาที) + `start_gateway.bat` (watchdog loop) ต่าง restart gateway ผ่านคนละทาง → gateway 2 ตัว (เคยเห็น 6 ตัว) → **Telegram 409 conflict** (poll token เดียวกัน 2 ตัว)
+- **ต้นตอ ③ Lock ค้างหลัง kill แบบ force:** `taskkill /F` ฆ่า gateway ทิ้งไว้ `gateway.lock`/`.dispatcher.lock` → ตัวใหม่ค้างตอน boot (ต้องลบ lock ก่อน start)
+- **ทางแก้ (self-heal + guard):**
+  1. `start_gateway.bat` — ย้าย proxy check ไปเป็น subroutine `:ensure_proxy` (เช็ค port 8899 → ถ้าตาย start ใหม่) เรียก **ก่อน guard และทุก loop** → proxy ฟื้นเองทุกครั้งที่ restart gateway
+  2. guard กันรันซ้ำ เปลี่ยนจากเช็ค PID เดียว → เช็ค process จริงผ่าน `check-gateway-running.ps1` (ใหม่) → bat ที่รันซ้ำ exit 0 ทันที ไม่สร้าง gateway ตัวที่ 2
+  3. `gateway-watch.ps1` — เพิ่ม **proxy self-heal ทุก 2 นาที** (ตรวจ port 8899 → start ใหม่ ถ้าตาย) — กัน proxy ตายตอน gateway ยังปกติ
+  4. `telegram-ipv4-proxy.py` — เพิ่ม probe ก่อน bind (กัน 2 proxy ซ้อนจาก SO_REUSEADDR)
+- **บทเรียน:** ⚠️ kill แบบ `taskkill /F` ต้องลบ `gateway.lock` + `kanban/.dispatcher.lock` ค้างด้วย (ไม่งั้นตัวใหม่ค้างเงียบ); ระบบนี้มี **3 กลไกกู้คืนที่ต้องสอดคล้องกัน** (bat watchdog + gateway-watch + task) — แก้จุดเดียวไม่พอ ต้องกันทั้ง proxy ตาย + double gateway + lock ค้าง
+- **ทดสอบ self-heal จริงแล้ว:** kill proxy → watcher start กลับเอง (`gateway-watch.log: PROXY: port 8899 ตาย -> เริ่มใหม่`) ✅; รัน bat ซ้ำตอน gateway ยังรัน → exit 0 ไม่ double ✅; หลัง restart ครบ: `Connected to Telegram` + heartbeat สด + proxy 1 ตัว ✅
 
 ### v6 — 15 ส.ค. 2026 (วิดีโอรีวิวตัวแรกผ่าน bot + บทเรียน 3 ข้อ)
 
