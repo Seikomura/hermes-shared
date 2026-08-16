@@ -180,6 +180,7 @@ C:\AI_FACTORY
 > **หมายเหตุ ⑬ LM Studio เครื่องทำงาน — `qwen/qwen3.5-9b`:** ผ่าน Tailscale ที่ `100.77.88.33:1234` (เดิมเป็น Ollama `qwen3:8b` ที่ `:11434` — ย้ายมาใช้ LM Studio แล้ว) — ⚠️ **ต้องใช้ `provider: custom`** + ระบุ `base_url` ตรงๆ (fallback path ของ Hermes **ไม่รู้จัก `provider: ollama`** — จะ error `Fallback to ollama failed: provider not configured`; แต่ `custom` + `base_url` ทำงานได้ — ทดสอบแล้ว ตอบจริง ~28s) และตั้ง `context_length: 65536` ใน `custom_providers` ต่อโมเดล (ผ่านเกณฑ์ 64K ของ Hermes) — `auxiliary.compression` ใช้ **OpenRouter ฟรี** แทน (งานบีบอัด context ต้อง ≥64K) — เปิด server อัตโนมัติตอน login ที่เครื่องทำงาน: `shared\tools\work-lmstudio-autostart.ps1`
 > - **⚠️ สำคัญ — หลังรีสตาร์ท LM Studio (⑭):** โมเดลจะโหลดกลับที่ context **8192 (ค่า default)** ไม่ใช่ 32K → ต้องโหลดใหม่ด้วย 32K ก่อนใช้เป็น fallback ไม่งั้น Hermes จะเจอ `Context length exceeded` สำหรับ prompt ยาว — **วิธีที่เร็วที่สุด (ใช้ `lms` CLI ที่มากับ LM Studio):** `lms load qwen/qwen3-1.7b -c 32768 -y` (ตรวจผลด้วย `lms ps`) หรือเปิด LM Studio GUI → คลิกโมเดล → ตั้ง Context Length = 32768 → โหลดใหม่ (ค่านี้จำต่อโมเดล)
 > - **ℹ️ เวอร์ชัน LM Studio:** 0.4.20 คือ **เวอร์ชันล่าสุด** (ตรวจแล้ว: เว็บ lmstudio.ai + winget ตรงกัน ณ ส.ค. 2026 — ไม่มีเวอร์ชันใหม่กว่า); API ของ 0.4.20 **ยังไม่รองรับการปิด reasoning ผ่านคำสั่ง** (ต้องปิดใน GUI: คลิกโมเดล → Reasoning: off → โหลดใหม่)
+> - **🕐 โหลดเฉพาะเมื่อจำเป็น (idle-based, 16 ส.ค. 2026):** ลบ auto-start ตอน login (Registry `--run-as-service`) แล้ว — `lmstudio-watch.ps1` (ทุก 2 นาทีผ่าน Task `LMStudioWatch`) เปลี่ยนเป็น: bot **เงียบ 30 นาที → unload โมเดล** (คืน RAM ~1.3GB) / **มี turn ใหม่ → โหลดกลับอัตโนมัติ** (`lms load qwen/qwen3-1.7b -c 65536`; ตรวจ activity จาก `agent.log` บรรทัด `conversation turn`) — server port 1234 ยังรันตลอด (ตัวรับคำสั่งเบาๆ) — แก้ค่าช่วง idle ได้ที่ `$IdleUnloadMin = 30` ด้านบนไฟล์
 
 ---
 
@@ -842,6 +843,15 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v8 — 16 ส.ค. 2026 (LM Studio โหลดเฉพาะเมื่อจำเป็น — idle-based)
+
+- **ปัญหา:** เครื่อง RAM 7.9GB เต็มง่าย → gateway OOM ตายกลาง turn (เจอจริงตอน turn "สวัสดี": ตายตอน API call #20, context 124K+) — ตัวกิน RAM: freebuff 786MB + **llama-server (LM Studio ⑭) 229MB+ (โมเดล 1.28GB ค้างใน memory ทั้งวัน)** + chrome/msedge หลายตัว
+- **ข้อเท็จจริง:** ชั้น ⑭ ถูกใช้ครั้งสุดท้ายเมื่อ 11 ส.ค. (5 วัน) แต่ LM Studio auto-start ตอน login (`Registry --run-as-service`) + watcher keep-alive ตลอด → รันทิ้งทั้งวัน
+- **แก้:** (1) **ลบ auto-start ตอน login** (Remove-ItemProperty Registry) (2) **`lmstudio-watch.ps1` ใหม่แบบ idle-based** — bot เงียบ 30 นาที (`$IdleUnloadMin=30`) → `lms unload` คืน RAM ~1.3GB / มี turn ใหม่ → `lms load -c 65536` กลับอัตโนมัติ; ตรวจ activity จาก `agent.log` บรรทัด `conversation turn` ล่าสุด (3) server port 1234 รันตลอด (ตัวรับคำสั่งเบาๆ) — ไม่กระทบ fallback
+- **บั๊กที่เจอระหว่างทำ:** `lmstudio-watch` เดิมวน "server ตาย → start ใหม่" ทุก 2 นาที (19:37–19:55) ทั้งที่ server รันปกติ — ต้นตอ: `lms server status` เขียน output ไป **stderr** + `$ErrorActionPreference='SilentlyContinue'` กลืนเป็น NativeCommandError → match `'running'` ไม่ติด → วนตลอด — **ทางแก้: เช็ค TCP port 1234 ตรงๆ (TcpClient) แทน parse ข้อความ** (วิธีเดียวกับ proxy)
+- **ทดสอบจริง:** unload อัตโนมัติ (log: `bot เงียบ 9 นาที -> unload qwen/qwen3-1.7b (คืน RAM)` + `unload สำเร็จ` + โมเดลหลุดจาก memory) ✅ / โหลดกลับอัตโนมัติ (`มี turn ใหม่ -> โหลด` → โมเดลกลับ IDLE 1.28GB @ 65536 context) ✅
+- **หมายเหตุ:** เครื่องทำงานยังใช้ `work-lmstudio-autostart.ps1` (โหลดตอน login ตามเดิม — งานหนัก ต้องพร้อมเสมอ) — idle-based ใช้เฉพาะเครื่องนี้ (fallback ฉุกเฉิน)
 
 ### v7 — 16 ส.ค. 2026 (กู้ bot เงียบ 5+ ชม. + self-heal proxy / กัน double gateway)
 
