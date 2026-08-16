@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v10 — แจ้งเตือน Telegram อัตโนมัติเมื่อ fallback ตกถึงชั้น lmstudio ⑭; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v11 — แก้ watcher restart วน: กัน 2 กลไกกู้คืนชนกัน + retry อ่าน heartbeat; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -844,6 +844,14 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 
 ## 14. Changelog
 
+### v11 — 16 ส.ค. 2026 (แก้ watcher restart วน — กัน 2 กลไกกู้คืนชนกัน)
+
+- **อาการ (เจอระหว่าง E2E 22:31–23:09):** watcher (`HermesGatewayWatch`) restart gateway **วนทุก 2 นาทีไม่หยุด** — bot ตอบได้แต่ถูกฆ่ากลางทางตลอด; `gateway-watch.log` เต็มไปด้วย `WATCH: heartbeat เก่า ... -> restart`
+- **① 2 กลไก restart แข่งกัน:** `start_gateway.bat` (spawn gateway เอง + คอย restart ตัวมันเอง) กับ watcher (เดิมทำ `schtasks /run` start task ซ้อน) → **2 bat + 2 gateway เขียน heartbeat ไฟล์เดียวกัน** → JSON เพี้ยน → watcher parse ล้ม → เห็น "heartbeat เก่า" → restart ซ้ำ วนไม่จบ — **แก้: watcher ฆ่า gateway ค้างเท่านั้น แล้วปล่อยให้ bat loop ตัวเดียวที่รออยู่ restart เอง** (ไม่ start task ซ้อน — ใช้ task เป็น backup เฉพาะตอนไม่มี bat loop)
+- **② watcher ฆ่า gateway ที่สด (race condition):** gateway เขียน heartbeat แบบ truncate+write (**ไม่ atomic**) → watcher อ่านเจอไฟล์ครึ่งเดียว → JSON เพี้ยน → parse ล้ม → "heartbeat เก่า" ผิด ๆ (log แสดง age ว่างเปล่า `( วิ)`) → **ฆ่า gateway ที่ทำงานปกติ** — แก้: **อ่าน heartbeat แบบ retry 3 ครั้ง (ห่าง 1 วิ)** รอให้เขียนเสร็จ + `$BootGraceSec` 180→**300** (RAM เต็ม boot ช้า เขียน heartbeat ครั้งแรกช้า)
+- **ยืนยัน:** หลังแก้ watcher เงียบ 2 รอบติด (ไม่มี "ฆ่า" ใหม่) + Connected คงเดิม + heartbeat สดต่อเนื่อง ✅ (E2E "สวัสดี" ตอบผ่าน openrouter 214 chars ส่งถึง + alert lmstudio ไม่ปลอม)
+- **บทเรียน:** ระบบนี้มี **2 กลไกกู้คืนที่ต้องไม่ชนกัน** — bat loop = restart หลัก (ตัวเดียว) / watcher = ฆ่า gateway ค้าง + self-heal proxy เท่านั้น; และ**อย่าอ่านไฟล์ state ที่เขียนแบบไม่ atomic โดยไม่ retry** (partial write → ตัดสินใจผิด → ฆ่า process ที่ปกติ)
+
 ### v10 — 16 ส.ค. 2026 (แจ้งเตือน Telegram เมื่อ fallback ตกถึงชั้น lmstudio ⑭)
 
 - **ปัญหา:** ชั้น ⑭ (qwen3-1.7b, CPU-only) ช้ากับ session context ใหญ่ — ทดสอบ v9 พบว่าประมวลผล 31K tokens นานกว่า 15 นาที → hermes ตัด stream (`Stream stale for 900s`) → bot เงียบโดยไม่มีใครรู้
@@ -851,10 +859,7 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 - **ข้อความแจ้ง:** `🐌 Bot ตกถึงชั้นสุดท้าย (LM Studio ⑭ — qwen3-1.7b, CPU-only)! ตอบอาจช้าเป็นนาที หรือเกิน 15 นาทีจนถูกตัด — ถ้าไม่เร่งด่วน รอ/ส่งใหม่ก็ได้` + timestamp + ข้อความที่ user ส่ง
 - **ทดสอบจริง:** baseline (ไม่ส่งย้อนหลัง) ✅ / ส่งจริง `ok=True` ✅ / รันซ้ำไม่ส่งซ้ำ ✅ / syntax PS1 ผ่าน ✅
 - **หมายเหตุ:** alert ทำงานเฉพาะ turn ที่ **เริ่ม** ด้วย lmstudio (มองเห็นตั้งแต่ชั้นแรก) — ไม่ใช่ตอน fallback ระหว่าง turn; ถ้าต้องการจับตอน fallback ระหว่าง turn ต้องดู log API call ที่ provider เปลี่ยน (ยังไม่ได้ทำ — ปกติ hermes fallback ระหว่าง turn เร็วพอ)
-- **⚠️ บั๊ก watcher restart วน (เจอระหว่าง E2E 22:31–23:09 — แก้แล้ว):**
-  - **① 2 กลไก restart แข่งกัน:** `start_gateway.bat` (spawn gateway เอง + คอย restart) กับ `HermesGatewayWatch` (เดิมทำ `schtasks /run`) → 2 bat + 2 gateway เขียน heartbeat ไฟล์เดียวกัน → JSON เพี้ยน → watcher parse ล้ม → restart ซ้ำ วนไม่จบ (restart ทุก 2 นาที 22:31→23:09) — **แก้: watcher ฆ่า gateway ค้างเท่านั้น แล้วปล่อยให้ bat loop ตัวเดียว restart เอง** (ไม่มี task ซ้อน)
-  - **② watcher ฆ่า gateway ที่สด (race condition):** gateway เขียน heartbeat แบบ truncate+write (ไม่ atomic) → watcher อ่านเจอไฟล์ครึ่งเดียว → JSON เพี้ยน → "heartbeat เก่า" ผิด ๆ (log แสดง age ว่างเปล่า) → ฆ่า gateway ที่ทำงานปกติ — **แก้: อ่าน heartbeat แบบ retry 3 ครั้ง (ห่าง 1 วิ) + `$BootGraceSec` 180→300** (RAM เต็ม boot ช้า เขียน heartbeat ครั้งแรกช้า)
-  - **ยืนยัน:** หลังแก้ watcher เงียบ 2 รอบติด (ไม่มี "ฆ่า" ใหม่) + Connected คงเดิม + heartbeat สดต่อเนื่อง ✅ — บทเรียน: ระบบนี้มี 2 กลไกกู้คืนที่**ต้องไม่ชนกัน** (bat loop = restart หลัก / watcher = ฆ่า + self-heal proxy เท่านั้น)
+- **อ้างอิง:** ปัญหา watcher restart วนที่เจอระหว่าง E2E → แยกบันทึกไว้ใน **v11**
 
 ### v9 — 16 ส.ค. 2026 (ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭ — ผล: เลือกถูก แต่ช้าเกินจริง)
 
