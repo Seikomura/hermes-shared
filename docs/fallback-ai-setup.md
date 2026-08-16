@@ -83,3 +83,7 @@
 2. **Nous ยังไม่มีเครดิต** — ใช้ได้เฉพาะตัว `:free` (solar-pro4 / hy3 / stepfun); ตัวเสียเงิน (เช่น claude-sonnet-4.6) จะ error 404 `requires credits` — เติมเครดิตที่ portal.nousresearch.com ถ้าอยากใช้
 3. **อย่าใช้ `--provider custom` ในการทดสอบ** — มัน resolve ไป OpenRouter; ใช้ `--provider lmstudio-work` ถึงจะไปเครื่องทำงานจริง
 4. ตรวจว่า bot ตอบผ่านเครื่องทำงานจริง: grep `100.77.88.33:1234` ใน `logs\agent.log` (วิธีละเอียด + ตัวอย่างบรรทัด log: **Workthrough §10.5**)
+
+---
+
+📚 **เอกสารที่เกี่ยวข้อง:** [SYSTEM-OVERVIEW.md](SYSTEM-OVERVIEW.md) (ภาพรวมระบบ 1 หน้า) · [Workthrough.md](Workthrough.md) (เชิงลึก/การแก้ปัญหา/Changelog) · [Quick-Start.md](Quick-Start.md) (เริ่มใช้ด่วน)

@@ -188,4 +188,4 @@ python C:\AI_FACTORY\shared\tools\factory_manager.py publish --factory ebook --p
 
 ---
 
-*รายละเอียดเชิงลึก สถาปัตยกรรม การแก้ปัญหา และแผนพัฒนา: ดู [Workthrough.md](Workthrough.md)*
+*📚 เอกสารที่เกี่ยวข้อง: [SYSTEM-OVERVIEW.md](SYSTEM-OVERVIEW.md) (ภาพรวมระบบ 1 หน้า) · [Workthrough.md](Workthrough.md) (เชิงลึก/การแก้ปัญหา/Changelog) · [FALLBACK-AI-SETUP.md](FALLBACK-AI-SETUP.md) (config + คำสั่งเช็ค fallback)*
