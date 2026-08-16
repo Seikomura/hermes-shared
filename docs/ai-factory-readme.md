@@ -2,7 +2,7 @@
 
 Hermes Agent runs natively on Windows as the Factory Manager. Its state lives in `C:\AI_FACTORY\shared\hermes_home`; all product assets live only in `C:\AI_FACTORY\products\<windows-safe-slug>`.
 
-> 📚 เอกสารเต็ม (ไทย): [Workthrough.md](Workthrough.md) · เริ่มใช้ด่วน: [Quick-Start.md](Quick-Start.md)
+> 📚 เอกสารเต็ม (ไทย): [SYSTEM-OVERVIEW.md](SYSTEM-OVERVIEW.md) (ภาพรวมระบบ 1 หน้า — แชร์ทีม) · [Workthrough.md](Workthrough.md) (แก้ปัญหาครบ + Changelog) · เริ่มใช้ด่วน: [Quick-Start.md](Quick-Start.md) · fallback config: [FALLBACK-AI-SETUP.md](FALLBACK-AI-SETUP.md)
 
 ## What it does
 

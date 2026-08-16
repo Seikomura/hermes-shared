@@ -1,4 +1,4 @@
-# hermes-shared — ศูนย์กลางอัปเดตสกิลระหว่างเครื่องทำงาน ↔ เครื่องบ้าน
+﻿# hermes-shared — ศูนย์กลางอัปเดตสกิลระหว่างเครื่องทำงาน ↔ เครื่องบ้าน
 
 Repo นี้คือ **CENTER (source of truth)** สำหรับของที่แชร์ระหว่าง 2 เครื่อง: สกิล local ที่สร้างเอง + สคริปต์ + เอกสาร
 **ไม่เก็บ**: `.env`, `auth.json`, `config.yaml` (มี secret/token ต่อเครื่อง), log, state.db — อย่า push เข้ามาเด็ดขาด
@@ -56,7 +56,8 @@ hermes-shared/
     ├── ai-factory-workthrough.md   # คู่มือ AI Factory (มี §10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน + §14 Changelog)
     ├── ai-factory-readme.md        # README ของ AI Factory (fallback chain 7 ชั้น + Nous free models)
     ├── ai-factory-quick-start.md   # Quick-Start ของ AI Factory
-    └── fallback-ai-setup.md        # สรุป config ไฟนอล + คำสั่งเช็คสถานะ fallback
+    ├── fallback-ai-setup.md        # สรุป config ไฟนอล + คำสั่งเช็คสถานะ fallback
+    └── system-overview.md          # ⭐ ภาพรวมระบบ 1 ไฟล์ (สถาปัตยกรรม/scripts/tasks/status) — ใช้แชร์ทีม
 ```
 
 ## วิธีใช้ sync.ps1 (ทั้ง 2 เครื่องใช้คำสั่งเดียวกัน)
