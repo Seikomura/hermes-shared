@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v9 — ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭: เลือกชั้นถูก แต่ CPU-only ช้าเกินจริง กับ session context ใหญ่; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v10 — แจ้งเตือน Telegram อัตโนมัติเมื่อ fallback ตกถึงชั้น lmstudio ⑭; docs ตรงกับ config.yaml)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -843,6 +843,14 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v10 — 16 ส.ค. 2026 (แจ้งเตือน Telegram เมื่อ fallback ตกถึงชั้น lmstudio ⑭)
+
+- **ปัญหา:** ชั้น ⑭ (qwen3-1.7b, CPU-only) ช้ากับ session context ใหญ่ — ทดสอบ v9 พบว่าประมวลผล 31K tokens นานกว่า 15 นาที → hermes ตัด stream (`Stream stale for 900s`) → bot เงียบโดยไม่มีใครรู้
+- **แก้:** สร้าง `shared/tools/lmstudio-alert.py` (stdlib-only) — อ่าน `logs/agent.log` หา turn ที่ match `conversation turn: ... provider=lmstudio` → ส่ง Telegram แจ้งเตือน 🐌 1 ครั้งต่อ turn (state file `.lmstudio_alert_state.json` กันส่งซ้ำ + retry ถ้าส่งไม่สำเร็จ — pattern เดียวกับ watchdog_notify.py); เรียกจาก `gateway-watch.ps1` ทุก 2 นาที (ผ่าน HermesGatewayWatch — ไม่ต้องสร้าง task ใหม่)
+- **ข้อความแจ้ง:** `🐌 Bot ตกถึงชั้นสุดท้าย (LM Studio ⑭ — qwen3-1.7b, CPU-only)! ตอบอาจช้าเป็นนาที หรือเกิน 15 นาทีจนถูกตัด — ถ้าไม่เร่งด่วน รอ/ส่งใหม่ก็ได้` + timestamp + ข้อความที่ user ส่ง
+- **ทดสอบจริง:** baseline (ไม่ส่งย้อนหลัง) ✅ / ส่งจริง `ok=True` ✅ / รันซ้ำไม่ส่งซ้ำ ✅ / syntax PS1 ผ่าน ✅
+- **หมายเหตุ:** alert ทำงานเฉพาะ turn ที่ **เริ่ม** ด้วย lmstudio (มองเห็นตั้งแต่ชั้นแรก) — ไม่ใช่ตอน fallback ระหว่าง turn; ถ้าต้องการจับตอน fallback ระหว่าง turn ต้องดู log API call ที่ provider เปลี่ยน (ยังไม่ได้ทำ — ปกติ hermes fallback ระหว่าง turn เร็วพอ)
 
 ### v9 — 16 ส.ค. 2026 (ทดสอบบังคับ fallback ไปชั้น lmstudio ⑭ — ผล: เลือกถูก แต่ช้าเกินจริง)
 

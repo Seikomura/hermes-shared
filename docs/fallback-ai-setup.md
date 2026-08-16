@@ -54,6 +54,7 @@
 | Tailscale เชื่อมต่อไหม | `tailscale status` |
 | Gateway ทำงาน/เชื่อม Telegram หรือยัง | `Get-Content "C:\AI_FACTORY\shared\hermes_home\state\gateway.lifecycle.json"` |
 | Bot ตอบผ่านชั้นไหนล่าสุด | `Get-Content "C:\AI_FACTORY\shared\hermes_home\logs\agent.log" -Tail 50 \| Select-String "turn:\|API call #1:\|Fallback activated\|100.77.88.33:1234"` — อธิบายแต่ละบรรทัด: **Workthrough §10.5** |
+| แจ้งเตือนอัตโนมัติเมื่อตกถึงชั้น lmstudio ⑭ | `python C:\AI_FACTORY\shared\tools\lmstudio-alert.py --dry-run` (แสดงว่าจะส่งอะไร) — รันอัตโนมัติทุก 2 นาทีผ่าน HermesGatewayWatch; state: `logs\.lmstudio_alert_state.json` |
 | ทดสอบคุยตรงผ่าน Nous ฟรี | `hermes chat -q "ตอบว่า OK" -Q --provider nous -m upstage/solar-pro4:free --max-turns 2` |
 | ทดสอบคุยตรงผ่านเครื่องทำงาน | `hermes chat -q "ตอบว่า OK" -Q --provider lmstudio-work -m qwen/qwen3.5-9b --max-turns 2` |
 | โมเดลฟรีทั้งหมดของ Nous | `curl -s https://inference-api.nousresearch.com/v1/models` (ดูตัวที่ pricing = 0) |
