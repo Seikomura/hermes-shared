@@ -762,6 +762,18 @@ response ready:    platform=telegram chat=1709297704 time=113.6s api_calls=1 res
 
 → สรุป: ชุด 1 ชั้นหลัก (ตอนนั้น = gemini) ตอบ 3.6s / ชุด 2 fallback (nous) ตอบ 9.6s / ชุด 3 primary ใหม่ (OpenRouter lightning ผ่าน proxy IPv4) API 13.1s — ทั้ง 3 เส้นทางทำงานจริงผ่าน Telegram; วิธีดูแบบนี้ใช้ได้กับทุกชั้น (เปลี่ยนไป grep `provider=openrouter` / `provider=nous` / `100.77.88.33:1234` / `provider=lmstudio`)
 
+*ชุดที่ 4 — E2E หลังแก้ watcher restart วน (16 ส.ค. 2026, 23:20): ตอบผ่าน primary OpenRouter Nemotron 3 Ultra — ยืนยันระบบนิ่ง + alert lmstudio ไม่ปลอม:*
+
+```
+inbound message:   platform=telegram user=Yoseph chat=1709297704 msg='สวัสดี'
+conversation turn: ... model=nvidia/nemotron-3-ultra-550b-a55b:free provider=openrouter platform=telegram
+API call #1:       model=nvidia/nemotron-3-ultra-550b-a55b:free provider=openrouter in=34265 out=110 total=34375 latency=42.7s
+response ready:    platform=telegram chat=1709297704 time=116.5s api_calls=1 response=98 chars
+[Telegram] Sending response (98 chars) to 1709297704      ← ส่งถึงแชทจริง
+```
+
+เช็คประกอบ (หลัง turn จบ): watcher เงียบ (Connected คงเดิม 23:10:19 — ไม่มี restart ระหว่าง turn) ✅ + `python C:\AI_FACTORY\shared\tools\lmstudio-alert.py` → `no new lmstudio turns` (alert ไม่ปลอม) ✅ — **ตัวอย่างนี้ยืนยันว่าหลังแก้ v11 ระบบนิ่งจริง** (ก่อนหน้า 22:31–23:09 watcher ฆ่า gateway วนทุก 2 นาที ข้อความเลยหาย)
+
 ### 10.6 ตัวอย่างข้อมูลที่เห็นใน log จริง (ณ วันที่ 9 ส.ค. 2026)
 
 - Product ที่สร้างแล้ว: `Test-Product--Thai-สินค้า`, `Test-E-book`, `Failure-Test`, `Unicode-ไทย-Test`, `แก้วเก็บความเย็น`, `หูฟังบลูทูธ`
