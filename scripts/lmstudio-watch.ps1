@@ -10,6 +10,14 @@
 $ErrorActionPreference = 'SilentlyContinue'
 $LMS = "$env:USERPROFILE\.lmstudio\bin\lms.exe"
 
+# ── กัน task ซ้อน: ถ้ามี instance อื่นรัน script นี้อยู่ (load ใช้เวลา 25s+) -> exit เงียบๆ
+# (Task Scheduler ตั้ง Stop If Still Running: Disabled -> 2 รอบชนกัน -> lms load 2 ตัว -> ล้ม)
+$selfPid = $PID
+$other = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
+    $_.ProcessId -ne $selfPid -and $_.CommandLine -match 'lmstudio-watch\.ps1'
+}
+if ($other) { exit 0 }
+
 # ── auto-detect HERMES_HOME ──
 if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
 elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
@@ -102,11 +110,13 @@ if ($modelInMem -and $lastTurnAge -ge $IdleUnloadMin) {
 }
 elseif (-not $modelInMem -and ($lastTurnAge -lt $IdleUnloadMin -or $lastTurnAge -lt 0)) {
     # มี turn ใหม่ (หรือไม่รู้) + โมเดลไม่อยู่ -> โหลดกลับ (fallback พร้อมใช้)
-    Log "WATCH: มี turn ใหม่ (เงียบ $lastTurnAge นาที) -> โหลด $Model (64K context)"
-    & $LMS load $Model -c 65536 2>&1 | Out-Null
+    # ⚠️ ต้องใช้ -c 32768 (native context ของ qwen3-1.7b — ตรง config.yaml: context_length: 32768)
+    #    -c 65536 จะทำให้ lms load ล้ม (Engine exited before healthy) -> วนโหลดไม่สำเร็จ
+    Log "WATCH: มี turn ใหม่ (เงียบ $lastTurnAge นาที) -> โหลด $Model (32K context)"
+    & $LMS load $Model -c 32768 2>&1 | Out-Null
     Start-Sleep -Seconds 35
     $chk = (& $LMS ps 2>&1 | Out-String)
-    if ($chk -match [regex]::Escape($Model)) { Log "WATCH: โหลดสำเร็จ" }
+    if ($chk -match [regex]::Escape($Model)) { Log "WATCH: โหลดสำเร็จ (32K)" }
     else { Log "WATCH: โหลดยังไม่สำเร็จ (รอบหน้าจะลองใหม่)" }
 }
 # อื่นๆ (เงียบ+unload แล้ว / มี turn+loaded แล้ว) -> ไม่ต้องทำอะไร
