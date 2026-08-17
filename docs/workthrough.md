@@ -21,7 +21,7 @@ $env:HERMES_HOME = 'C:\AI Factory'
 ```powershell
 powershell -ExecutionPolicy Bypass -File 'C:\AI Factory\health-check.ps1'
 ```
-ตรวจครบ 13 จุด: heartbeat, process, gateway log, Telegram, fallback chain, LM Studio, Tailscale, auto-start task, .env keys, errors — รายงานเป็นภาษาไทยพร้อมสี (exit code: 0=ปกติ / 1=มีปัญหา / 2=มีข้อควรสังเกต)
+ตรวจครบ 8 จุด: heartbeat, process, gateway log, fallback chain (API-only), Tailscale, auto-start task, .env keys, errors — รายงานเป็นภาษาไทยพร้อมสี (exit code: 0=ปกติ / 1=มีปัญหา / 2=มีข้อควรสังเกต)
 
 > 📌 **ถ้าแก้ไฟล์ `health-check.ps1` แล้วรันไม่ได้ (error parse ตอนภาษาไทย)** — ไฟล์ต้องเป็น **UTF-8 with BOM** ไม่งั้น PowerShell 5.1 อ่านภาษาไทยเพี้ยน ให้เปิดด้วย editor ที่เซฟเป็น UTF-8 with BOM (หรือ Notepad → Save As → Encoding: UTF-8 with BOM)
 
@@ -136,7 +136,7 @@ Get-Content 'C:\AI Factory\gateway-console.log' -Tail 20   # log หยุดน
 & $HERMES fallback list          # หลัก + chain ครบ 3 ตัวไหม?
 # ทดสอบแต่ละตัวตรงๆ ผ่าน CLI:
 & $HERMES chat -q 'ตอบว่า OK' -Q --provider openrouter -m nvidia/nemotron-3-super-120b-a12b:free --max-turns 2
-& $HERMES chat -q 'ตอบว่า OK' -Q --provider custom -m qwen/qwen3.5-9b --max-turns 2
+& $HERMES chat -q 'ตอบว่า OK' -Q --provider gemini -m gemini-3.6-flash --max-turns 2
 ```
 
 ---
@@ -175,7 +175,7 @@ Get-Content 'C:\AI Factory\gateway-console.log' -Tail 20   # log หยุดน
 & $HERMES chat -q 'ตอบว่า OK' -Q --provider openrouter -m nvidia/nemotron-3-super-120b-a12b:free --max-turns 2
 & $HERMES chat -q 'ตอบว่า OK' -Q --provider openrouter -m google/gemma-4-31b-it:free --max-turns 2
 & $HERMES chat -q 'ตอบว่า OK' -Q --provider nous -m upstage/solar-pro4:free --max-turns 2
-& $HERMES chat -q 'ตอบว่า OK' -Q --provider custom -m qwen/qwen3.5-9b --max-turns 2
+& $HERMES chat -q 'ตอบว่า OK' -Q --provider gemini -m gemini-3.6-flash --max-turns 2
 
 # ── โหมดโต้ตอบ (พิมพ์คุยเรื่อยๆ) ──
 & $HERMES chat
@@ -187,7 +187,7 @@ Get-Content 'C:\AI Factory\gateway-console.log' -Tail 20   # log หยุดน
 
 **ตารางเทสต์:** ถ้า `--provider X` ไม่ตอบ/error → แสดงว่าตัวนั้นมีปัญหา → ดูส่วนที่เกี่ยวข้อง (B/G/F)
 
-> 💡 local AI (LM Studio) ใช้ `--provider custom -m qwen/qwen3.5-9b` (Hermes runtime รู้จัก `custom` + `base_url` จาก config — เหมือน Ollama รุ่นก่อน)
+> 💡 (v12 — ลบ LM Studio แล้ว) ระบบเป็น API-only: ทดสอบแต่ละชั้นด้วย `--provider openrouter` / `--provider nous` / `--provider gemini`
 
 > 💡 ใช้ `--max-turns 2-3` เสมอตอนเทสต์ เพื่อไม่ให้ agent รัน tool เป็นชุดยาวๆ กิน quota/เวลา
 
@@ -212,66 +212,16 @@ Get-Content 'C:\AI Factory\state\gateway.heartbeat'
 
 ---
 
-### F. Local AI (qwen3.5-9b / LM Studio) ไม่ทำงาน
+### F. Local AI / LM Studio (ถูกลบออกแล้วตั้งแต่ v12 — 17 ส.ค. 2026)
 
-```powershell
-# 1) LM Studio ฟังอยู่ไหม? (ผ่าน Tailscale IP — port 1234)
-curl http://100.77.88.33:1234/v1/models
-
-# 2) Tailscale เชื่อมต่อไหม?
-tailscale status
-
-# 3) ทดสอบ qwen3.5-9b ผ่าน CLI
-& $HERMES chat -q 'ตอบว่า OK' -Q --provider custom -m qwen/qwen3.5-9b --max-turns 2
-```
-
-| อาการ | สาเหตุ/แก้ |
-|---|---|
-| curl ไม่ตอบ | LM Studio ไม่รัน → รัน `lms daemon up` + `lms server start --port 1234 --bind 0.0.0.0` หรือ restart เครื่อง (auto-start ผ่าน `LMStudioServer.lnk` + `lmstudio-start.ps1`) |
-| `tailscale status` เห็นเครื่องเดียว | เครื่องบ้าน login คนละบัญชี → ต้องใช้บัญชีเดียวกับเครื่องทำงาน |
-| qwen3.5-9b error "connection" | เครื่องทำงาน sleep/ปิด หรือ firewall กัน → ตั้ง Never sleep |
-| เรียกผ่าน bot แล้ว error แปลกๆ | เช็ค config entry 3 ต้องเป็น `provider: custom` + `base_url: http://100.77.88.33:1234/v1` (ดูส่วน G) |
-| error "context window ... below the minimum 64,000" | โหลดโมเดลด้วย context เล็กไป → ต้อง `lms load qwen/qwen3.5-9b -c 65536` (lmstudio-start.ps1 ทำไว้แล้ว) |
-| ข้อความแรกช้า (ต้องรอโหลดโมเดล) | โมเดลหลุดจาก memory (daemon restart / unload) → **watchdog** `lmstudio-watch.ps1` (task `LMStudioWatch` ทุก 2 นาที) จะโหลดกลับคืนเองอัตโนมัติ — หรือรัน `powershell -File 'C:\AI Factory\lmstudio-watch.ps1'` ด้วยมือ |
+> ⚠️ ระบบเป็น **API-only** แล้ว (chain 12 ชั้น: OpenRouter × 8 → Nous × 3 → Gemini) — LM Studio (เครื่องนี้ + เครื่องทำงานผ่าน Tailscale) **ถูกถอดออกจาก config แล้ว** ไฟล์ `lmstudio-watch.ps1` / `lmstudio-alert.py` / `work-lmstudio-autostart.ps1` / `lmstudio-start.ps1` ถูกลบ — **ไม่ต้องเปิด LM Studio / Tailscale / เครื่องทำงานอีก**
+> ถ้าเจอ error เกี่ยวกับ qwen3.5-9b / qwen3-1.7b / port 1234 / 100.77.88.33 → มองข้ามได้ (เป็น config เก่าที่โดนลบแล้ว) — ตรวจ `hermes fallback list` ว่ามีแค่ 12 ชั้น API
 
 ---
 
-### G. Error: `qwen3.5-9b is not a valid model ID` ⚠️
+### K. (ถูกลบแล้ว — เคยเป็น Error: `"qwen3.5-9b" does not support thinking`)
 
-**สาเหตุ:** fallback entry 3 เคยตั้งเป็น `provider: ollama` ซึ่ง Hermes runtime **ไม่รู้จัก** → พยายามส่งโมเดลไปที่ OpenRouter → error นี้ (ตอนนี้เป็น LM Studio แล้ว)
-
-**วิธีแก้ (แก้แล้ว แต่ห้ามเผลอเปลี่ยนกลับ):** ใน `config.yaml` entry 3 **ต้องเป็น:**
-```yaml
-  - provider: custom
-    model: qwen/qwen3.5-9b
-    base_url: http://100.77.88.33:1234/v1
-```
-> ตัว `custom` + `base_url` คือวิธีที่ Hermes runtime รู้จัก (ทดสอบแล้วว่าทำงาน) — อย่าเปลี่ยนเป็น `ollama`
-
----
-
-### K. Error: `"qwen3.5-9b" does not support thinking` ⚠️
-
-**อาการ:** bot ตอบ error `The model provider failed after retries` + ใน `gateway-console.log` / `errors.log` เจอ:
-```
-Error code: 400 - {'error': {'message': '"phi4-mini" does not support thinking', ...}}
-```
-**สาเหตุ (เดิม):** `agent.reasoning_effort: low` (global) ทำให้ Hermes ส่ง `reasoning_effort: "low"` ไปให้ Ollama แต่ Ollama **ปฏิเสธ** (phi4-mini เดิมไม่รองรับ thinking) → 400 → เป็น non-retryable → turn ตาย — ปิด thinking ไว้แล้วใน config สำหรับโมเดล local
-
-**วิธีแก้ (แก้แล้ว):** เพิ่ม per-model override ใน `config.yaml` ใต้ `agent:` — override นี้มี priority สูงกว่า global:
-```yaml
-agent:
-  reasoning_effort: low
-  reasoning_overrides:
-    qwen/qwen3.5-9b: false      # ปิด thinking ให้เร็วขึ้นบนเครื่องนี้
-```
-แล้ว restart gateway (ส่วน I)
-
-**ตรวจว่าแก้สำเร็จ:** ใน `logs\agent.log` ควรเห็น
-```
-Fallback qwen/qwen3.5-9b: reasoning_config resolved: {'enabled': False}   ✅
-```
-(ถ้ายังเห็น `{'enabled': True, 'effort': 'low'}` แสดงว่า override ไม่ถูกอ่าน)
+> ⚠️ ระบบเป็น API-only (v12) — โมเดล local qwen3.5-9b/qwen3-1.7b ถูกลบจาก config แล้ว ปัญหา reasoning ของโมเดล local นี้ไม่มีอีกต่อไป
 
 ---
 
@@ -282,7 +232,6 @@ Fallback qwen/qwen3.5-9b: reasoning_config resolved: {'enabled': False}   ✅
 | Windows Terminal เปล่า (เปิดค้างตั้งแต่เช้า) | ✅ ปิดได้ (ไม่ใช่ bot) |
 | cmd เปล่า title ว่าง | ✅ ปิดได้ถ้าไม่ใช่ตัวที่กำลังรันคำสั่ง |
 | หน้าต่าง "gateway started pid=..." | ⚠️ ตัวจริง bot รันแบบ **ไม่มีหน้าต่าง** — ถ้าเห็นแบบนี้เป็นของเก่า/หลงเหลือ ปิดได้ แล้วตรวจ gateway ยังตอบไหม |
-| หน้าต่าง LM Studio | ⚠️ ปิดได้ แต่ LM Studio server ทำงานผ่าน daemon — ถ้าปิด GUI แล้ว server ตาย ให้รัน `lmstudio-start.ps1` (หรือ restart เครื่อง) — ปกติ autostart รันแบบ headless ไม่มีหน้าต่าง |
 
 **ตรวจว่าการปิดหน้าต่างไม่กระทบ bot:**
 ```powershell
@@ -305,18 +254,9 @@ schtasks /run /TN HermesGateway
 
 ---
 
-### J. เครื่องบ้านต่อกับเครื่องทำงาน
+### J. (ถูกลบแล้ว — เคยเป็น: เครื่องบ้านต่อกับเครื่องทำงานผ่าน Tailscale)
 
-เครื่องบ้านต้อง:
-1. ติดตั้ง Tailscale + **login บัญชีเดียวกับเครื่องทำงาน** → `tailscale status` ควรเห็น 2 เครื่อง
-2. ใน `config.yaml` **เครื่องบ้าน** เพิ่ม fallback entry ชี้มาที่เครื่องทำงาน:
-   ```yaml
-     - provider: custom
-    model: qwen/qwen3.5-9b
-    base_url: http://100.77.88.33:1234/v1   # IP ของเครื่องทำงาน (LM Studio port 1234)
-   ```
-3. ทดสอบ: `curl http://100.77.88.33:1234/v1/models`
-4. อย่าลืม: เครื่องทำงานต้อง **เปิดค้างไว้** (ห้าม sleep) + LM Studio ต้อง bind `0.0.0.0` (ตั้งแล้วใน `lmstudio-start.ps1`)
+> ⚠️ v12 — ไม่ต้องใช้ Tailscale / เครื่องทำงาน / LM Studio อีกแล้ว (API-only) — ข้ามหัวข้อนี้ได้
 
 ---
 
@@ -324,7 +264,7 @@ schtasks /run /TN HermesGateway
 
 | คำสั่ง | ใช้ทำอะไร |
 |---|---|
-| `powershell -File health-check.ps1` | ตรวจสุขภาพครบ 13 จุด (รันจาก `C:\AI Factory`) |
+| `powershell -File health-check.ps1` | ตรวจสุขภาพครบ 8 จุด (รันจาก `C:\AI Factory`) |
 | `... health-check.ps1 -NotifyTelegram` | ตรวจ + ส่งผลไป Telegram เฉพาะตอนมีปัญหา |
 | `... health-check.ps1 -NotifyTelegram -AlwaysReport` | ตรวจ + ส่งผลไป Telegram เสมอ (ทดสอบ) |
 | `schtasks /query /TN HermesHealthCheck /V /FO LIST` | เช็ค task ตรวจสุขภาพ (ทุก 30 นาที) |
@@ -339,8 +279,7 @@ schtasks /run /TN HermesGateway
 | `schtasks /run /TN HermesGateway` | เปิด gateway |
 | `schtasks /end /TN HermesGateway` | ปิด gateway |
 | `taskkill /F /IM hermes.exe` | ฆ่า gateway process |
-| `curl http://100.77.88.33:1234/v1/models` | เช็ค LM Studio (local AI) |
-| `tailscale status` | เช็ค Tailscale |
+| `tailscale status` | เช็ค Tailscale (ไม่จำเป็นแล้ว — API-only v12) |
 
 > 💻 หมายเหตุ: ถ้าใช้ **git-bash** แทน PowerShell ให้เปลี่ยน `/` เป็น `//` (เช่น `schtasks //run //TN HermesGateway`)
 
@@ -350,7 +289,7 @@ schtasks /run /TN HermesGateway
 
 Task **`HermesFallbackWatch`** รัน `fallback-watch.ps1` ทุก 1 นาที
 
-**แจ้งเตือนเมื่อ:** bot fallback ไปโมเดลสำรอง **ชั้นใดก็ได้** (gemini → gemma → nous → qwen3.5-9b) — chain ล้มพร้อมกันหลายชั้นจะ**รวมเป็นข้อความเดียว**พร้อมลำดับ
+**แจ้งเตือนเมื่อ:** bot fallback ไปโมเดลสำรอง **ชั้นใดก็ได้** (openrouter → nous → gemini) — chain ล้มพร้อมกันหลายชั้นจะ**รวมเป็นข้อความเดียว**พร้อมลำดับ
 
 **กันสแปม (cooldown):** แจ้งครั้งเดียว แล้ว**เงียบ 60 นาที** (ปรับได้ด้วย `-CooldownMinutes`) — ถ้า API มีปัญหาทั้งวัน จะได้แจ้งไม่เกิน 1 ครั้ง/ชั่วโมง ไม่ใช่ทุกนาที
 
@@ -359,7 +298,7 @@ Task **`HermesFallbackWatch`** รัน `fallback-watch.ps1` ทุก 1 นา
 | `👀 Fallback Watch` + `1. nemotron → gemini` | โมเดลหลัก (nemotron:free) มีปัญหา → ไปชั้น 1 (gemini) | เช็ค OpenRouter quota (รอ reset เที่ยงคืน หรือเติม $10) |
 | `... 2. gemini → gemma` | Gemini ชน quota → ไปชั้น 2 (gemma:free) | เช็ค Gemini quota (รอ ~1 นาที ฟื้นเอง) |
 | `... 3. gemma → solar-pro4:free (Nous)` | OpenRouter free quota หมด → ใช้ Nous Portal ฟรี | รอ OpenRouter reset (เที่ยงคืน UTC) หรือเติม $10 → 1,000 req/วัน |
-| `... 4. solar-pro4:free → qwen3.5-9b (LM Studio)` | API ภายนอกพังหมด → ใช้ local AI | API หลัก+สำรองมีปัญหาพร้อมกัน → รอหรือเติม credits |
+| `... 4. stepfun:free → gemini-3.6-flash (Gemini)` | เรียงไปถึงชั้นสุดท้ายแล้ว | API หลัก+สำรองมีปัญหาพร้อมกัน → รอหรือเติม credits |
 | (ไม่มีข้อความ) | bot ยังใช้ nemotron:free อยู่ หรืออยู่ในช่วงเงียบ (เพิ่งแจ้ง < 60 นาที) | ไม่ต้องทำอะไร |
 
 **จัดการ task:**

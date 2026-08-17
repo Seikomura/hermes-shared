@@ -52,14 +52,6 @@ if (-not $proxyUp) {
     }
 }
 
-# ── 0.5) LM Studio fallback alert (ทุก 2 นาที) ──
-# ถ้า turn ตกถึงชั้นสุดท้าย (provider=lmstudio = qwen3-1.7b CPU-only) -> ส่ง Telegram แจ้ง
-# เตือนว่าคำตอบอาจช้า/ถูกตัด 15 นาที — state file กันส่งซ้ำ (ดู lmstudio-alert.py)
-$LmsAlertScript = 'C:\AI_FACTORY\shared\tools\lmstudio-alert.py'
-if (Test-Path $LmsAlertScript) {
-    & $ProxyPython $LmsAlertScript 2>&1 | Out-Null
-}
-
 # ── 1) อ่าน heartbeat (retry กัน partial write) ──
 # ⚠️ gateway เขียน heartbeat ไฟล์แบบ truncate+write (ไม่ atomic) — watcher อาจอ่านเจอ
 #    ไฟล์ครึ่งเดียว (JSON เพี้ยน) -> parse ล้ม -> "heartbeat เก่า" ผิด ๆ -> ฆ่า gateway ที่ปกติ

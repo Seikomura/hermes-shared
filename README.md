@@ -45,14 +45,11 @@ hermes-shared/
 │   ├── stop_gateway.bat            #   หยุด gateway แบบสะอาด (ไม่ให้ watchdog ขึ้นใหม่)
 │   ├── start_gateway_hidden.vbs    #   wrapper รัน start_gateway.bat แบบไร้หน้าต่าง
 │   ├── register_gateway_task.ps1   #   ลง task AI_Factory_Gateway (เปิดตอน login)
-│   ├── watchdog_notify.py          #   แจ้ง Telegram ทุกครั้งที่ gateway ตาย (อ่าน token จาก .env)
-│   └── work-lmstudio-autostart.ps1 #   เครื่องทำงาน: โหลด qwen3.5-9b + เปิด server bind 0.0.0.0 ตอน login
+│   └── watchdog_notify.py          #   แจ้ง Telegram ทุกครั้งที่ gateway ตาย (อ่าน token จาก .env)
 └── docs/
     ├── workthrough.md              # คู่มือแก้ปัญหาครบ (ภาษาไทย) — จากเครื่องทำงาน
     ├── README.md                   # README หลักของเครื่องทำงาน
-    ├── home-machine-guide.md       # คู่มือ 3 ขั้นตอนสำหรับเครื่องบ้าน (รันสคริปต์ + ทดสอบ + คุย bot)
-    ├── freebuff-home-setup.md      # ⭐ คู่มือตั้งค่าเครื่องบ้าน — ให้ Freebuff เครื่องบ้านอ่านก่อนลงมือ
-    # ── เพิ่มจากเครื่องบ้าน (AI Factory manual + fallback chain ล่าสุด) ──
+    # ── เพิ่มจากเครื่องบ้าน (AI Factory manual + fallback chain ล่าสุด — API-only 12 ชั้น) ──
     ├── ai-factory-workthrough.md   # คู่มือ AI Factory (มี §10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน + §14 Changelog)
     ├── ai-factory-readme.md        # README ของ AI Factory (fallback chain 7 ชั้น + Nous free models)
     ├── ai-factory-quick-start.md   # Quick-Start ของ AI Factory

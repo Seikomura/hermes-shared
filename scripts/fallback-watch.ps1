@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   ตรวจ logs\agent.log หาเหตุการณ์ "Fallback activated: X → Y" ทุกชั้น
-  (gemini → nous → openrouter → qwen3.5-9b/LM Studio) แล้วส่งแจ้งเตือนไป Telegram
+  (openrouter → nous → gemini — API เท่านั้น) แล้วส่งแจ้งเตือนไป Telegram
 
   แจ้งแบบ cooldown (กันสแปม): แจ้งครั้งเดียว แล้วเงียบภายในระยะเวลา
   ที่กำหนด (ค่าเริ่มต้น 60 นาที) — ถ้า Gemini quota หมดทั้งวัน จะได้
@@ -104,7 +104,7 @@ if ($TestSend) {
         '[TEST] Fallback activated: nvidia/nemotron-3-super-120b-a12b:free → gemini-3.6-flash (gemini)',
         '[TEST] Fallback activated: gemini-3.6-flash → upstage/solar-pro4:free (nous)',
         '[TEST] Fallback activated: upstage/solar-pro4:free → tencent/hy3:free (nous)',
-        '[TEST] Fallback activated: tencent/hy3:free → qwen/qwen3.5-9b (custom)'
+        '[TEST] Fallback activated: tencent/hy3:free → gemini-3.6-flash (gemini)'
     )
 } elseif ($newText) {
     $found = @($newText -split "`r?`n" | Where-Object { $_ -match $FALLBACK_PATTERN })
@@ -181,7 +181,7 @@ foreach ($line in $newFound) {
     $step = ($line -as [string]) -replace '^.*?Fallback activated:\s*', ''
     $step = $step -replace '\s*\((openrouter|custom|gemini|nous)\)\s*$', ''
     $layer = if ($step -match 'solar-pro4') { ' (Nous)' }
-             elseif ($step -match 'qwen3.5-9b') { ' (LM Studio)' } else { '' }
+             elseif ($step -match 'gemini') { ' (Gemini)' } else { '' }
     $chainLines.Add("  $i. $step$layer")
 }
 $chainLines.Add('')

@@ -92,7 +92,7 @@ if ($Scripts) {
         Write-Log "  OK: $($_.Name)"
     }
 
-    # ลง Task Scheduler (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว, ข้าม LMStudioWatch ถ้าไม่มี LM Studio)
+    # ลง Task Scheduler (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว; v12: ไม่มี LMStudioWatch แล้ว)
     Write-Log "ลง Task Scheduler (install-tasks.ps1) ..."
     & (Join-Path $repo 'scripts\install-tasks.ps1') -HERMES_HOME $HERMES_HOME
 }

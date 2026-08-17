@@ -1,7 +1,8 @@
-# 🤖 Hermes Gateway + AI Fallback System
+﻿# 🤖 Hermes Gateway + AI Fallback System
 
 > ระบบ Bot Telegram ที่ใช้ **Hermes Agent** เป็นสมอง ทำงานเงียบๆ เบื้องหลังเครื่องทำงาน (Windows)
-> พร้อมระบบ fallback หลายชั้น: OpenRouter (free) → Gemini API → Local AI (LM Studio)
+> พร้อมระบบ fallback หลายชั้น (API-only 12 ชั้น ตั้งแต่ v12 — 17 ส.ค. 2026): OpenRouter (free) → Nous Portal (free) → Gemini API
+> ⚠️ **LM Studio / Tailscale / local AI ถูกลบออกแล้ว** — เหลือ API ล้วน ไม่ต้องเปิดเครื่องทำงานค้างไว้
 
 ---
 
@@ -11,9 +12,7 @@
 |---|---|
 | **Hermes Agent** | ตัว AI agent ที่มี tool-calling (รันคำสั่ง, อ่านไฟล์, ท่องเว็บ ฯลฯ) |
 | **Telegram Gateway** | คอยฟังข้อความจาก Telegram bot → ส่งให้ Hermes ประมวลผล → ตอบกลับ |
-| **Fallback Chain** | เมื่อโมเดลหลักล่ม/quota หมด จะสลับไปโมเดลสำรองตามลำดับอัตโนมัติ |
-| **LM Studio (Local AI)** | โมเดล qwen3.5-9b รันบนเครื่องทำงาน (RTX 4050 6GB) ใช้เป็นชั้นสุดท้าย (ไม่ต้องพึ่งอินเทอร์เน็ตภายนอก) |
-| **Tailscale** | VPN ส่วนตัว เชื่อมเครื่องทำงาน ↔ เครื่องบ้าน (เครื่องบ้านใช้ local AI ของเครื่องทำงานได้) |
+| **Fallback Chain** | เมื่อโมเดลหลักล่ม/quota หมด จะสลับไปโมเดลสำรองตามลำดับอัตโนมัติ (API ทั้งหมด) |
 
 ---
 
@@ -33,11 +32,12 @@
                        ▼
 ┌─ Hermes Gateway (python, เบื้องหลัง) ────────────────┐
 │  ตอบกลับ Telegram + ประมวลผลผ่าน Fallback Chain      │
-│  1. nemotron:free      (OpenRouter)         ← หลัก   │
-│  2. gemini-3.6-flash   (Google AI Studio)  ← สำรอง 1│
-│  3. gemma:free         (OpenRouter)         ← สำรอง 2│
-│  4. solar-pro4:free    (Nous Portal)        ← สำรอง 3│
-│  5. qwen3.5-9b         (LM Studio ที่เครื่องทำงาน) ← สำรอง 4│
+│  1. nemotron-3-ultra:free  (OpenRouter)   ← หลัก   │
+│  2. lightning/laguna/super  (OpenRouter)   ← สำรอง 1-3│
+│  3. north-mini/gpt-oss/nano  (OpenRouter)  ← สำรอง 4-6│
+│  4. gemma-4-26b:free   (OpenRouter)        ← สำรอง 7│
+│  5. solar-pro4/hy3/stepfun (Nous)          ← สำรอง 8-10│
+│  6. gemini-3.6-flash   (Google AI Studio)  ← สำรอง 11│
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -102,21 +102,27 @@ $env:HERMES_HOME = 'C:\AI Factory'
 ตรวจสอบได้ด้วย `hermes fallback list` — ควรเห็น:
 
 ```
-Primary:   nvidia/nemotron-3-super-120b-a12b:free  (via openrouter)
-Fallback chain (4 entries):
-  1. gemini-3.6-flash  (via gemini)
-  2. google/gemma-4-31b-it:free               (via openrouter)
-  3. upstage/solar-pro4:free                  (via nous)
-  4. qwen/qwen3.5-9b  (via custom)  [http://100.77.88.33:1234/v1]
+Primary:   nvidia/nemotron-3-ultra-550b-a55b:free  (via openrouter)
+Fallback chain (11 entries):
+  1. nvidia/nemotron-3.5-lightning:free  (via openrouter)
+  2. poolside/laguna-s-2.1:free           (via openrouter)
+  3. nvidia/nemotron-3-super-120b-a12b:free (via openrouter)
+  4. cohere/north-mini-code:free          (via openrouter)
+  5. openai/gpt-oss-20b:free              (via openrouter)
+  6. nvidia/nemotron-3-nano-omni:free     (via openrouter)
+  7. google/gemma-4-26b-a4b-it:free       (via openrouter)
+  8. upstage/solar-pro4:free              (via nous)
+  9. tencent/hy3:free                     (via nous)
+  10. stepfun/step-3.7-flash:free         (via nous)
+  11. gemini-3.6-flash                    (via gemini)
 ```
 
 | ชั้น | โมเดล | Provider | ค่าใช้จ่าย | ใช้เมื่อ |
 |---|---|---|---|---|
-| หลัก | nemotron-3-super-120b:free | OpenRouter | ฟรี | ปกติ |
-| สำรอง 1 | gemini-3.6-flash | Google AI Studio | ฟรี (20 req/นาที) | nemotron quota หมด |
-| สำรอง 2 | gemma-4-31b-it:free | OpenRouter | ฟรี | Gemini quota หมด |
-| สำรอง 3 | solar-pro4:free | Nous Portal | ฟรี (50 RPM) | OpenRouter free quota หมด |
-| สำรอง 4 | qwen3.5-9b | LM Studio (เครื่องตัวเอง) | ฟรี 100% | API ภายนอกทั้งหมดล่ม/เน็ตขาด |
+| หลัก | nemotron-3-ultra-550b:free | OpenRouter | ฟรี | ปกติ |
+| สำรอง 1-7 | lightning → gemma-4-26b | OpenRouter | ฟรี | หลัก quota หมด |
+| สำรอง 8-10 | solar-pro4 / hy3 / stepfun | Nous Portal | ฟรี (50 RPM) | OpenRouter free quota หมด |
+| สำรอง 11 | gemini-3.6-flash | Google AI Studio | ฟรี (20 req/นาที) | ชั้นบนล้มหมด |
 
 > 💡 **Gemini free tier** มี limit **20 request/นาที** (rolling — reset เองใน ~1 นาที)
 > เทิร์น agentic ยาวๆ (หลาย tool call) อาจชน quota บ่อย → ระบบจะ fallback เองอัตโนมัติ ไม่ต้องกังวล
@@ -128,9 +134,8 @@ Fallback chain (4 entries):
 | รายการ | กลไก | เริ่มเมื่อ |
 |---|---|---|
 | Hermes Gateway (bot) | Task Scheduler: `HermesGateway` (AtStartup) | เปิดเครื่องทันที (ก่อน login) |
-| LM Studio (local AI) | Startup folder: `LMStudioServer.lnk` → `lmstudio-start.ps1` | ตอน login |
 
-ลำดับตอนเปิดเครื่อง: `เปิดเครื่อง → HermesGateway เริ่ม (bot พร้อมตอบ) → login → LM Studio เริ่ม headless (local AI พร้อม)`
+ลำดับตอนเปิดเครื่อง: `เปิดเครื่อง → HermesGateway เริ่ม (bot พร้อมตอบ)` — **ไม่มี LM Studio ให้เริ่มอีกแล้ว (v12 API-only)**
 
 เช็คสถานะ:
 ```powershell
@@ -176,9 +181,8 @@ fallback_providers:
     model: google/gemma-4-31b-it:free
   - provider: nous                # Nous Portal (login ผ่าน `hermes portal` — ฟรี)
     model: upstage/solar-pro4:free
-  - provider: custom              # ⚠️ ต้องเป็น custom (ไม่ใช่ ollama) + ระบุ base_url
-    model: qwen/qwen3.5-9b
-    base_url: http://100.77.88.33:1234/v1   # Tailscale IP ของเครื่องทำงาน (LM Studio port 1234)
+```
+# (v12: ไม่มีชั้น local/LM Studio แล้ว — chain จบที่ gemini ตาม template config.orchestration.example.yaml)
 ```
 
 ### .env (key ลับ — อย่าแชร์ไฟล์นี้)
@@ -216,9 +220,9 @@ schtasks /delete /TN HermesHealthCheck /F
 
 ### 👀 แจ้งเตือน fallback ทุกชั้น (Fallback Watch)
 
-Task Scheduler **`HermesFallbackWatch`** รัน `fallback-watch.ps1` ทุก 1 นาที — ตรวจ `logs\agent.log` หาเหตุการณ์ "Fallback activated" **ทุกชั้น** (gemini → gemma → nous → qwen3.5-9b/LM Studio) แล้ว**ส่งข้อความแจ้งเตือนเข้า Telegram ทันที**
+Task Scheduler **`HermesFallbackWatch`** รัน `fallback-watch.ps1` ทุก 1 นาที — ตรวจ `logs\agent.log` หาเหตุการณ์ "Fallback activated" **ทุกชั้น** (openrouter → nous → gemini) แล้ว**ส่งข้อความแจ้งเตือนเข้า Telegram ทันที**
 
-- **แจ้งเมื่อ:** bot ต้องสลับไปโมเดลสำรองชั้นไหนก็ได้ (nemotron หลักมีปัญหา = ชั้น 1 Gemini, Gemini หมด = ชั้น 2 gemma, OpenRouter quota หมด = ชั้น 3 Nous, ถึง LM Studio = ชั้น 4)
+- **แจ้งเมื่อ:** bot ต้องสลับไปโมเดลสำรองชั้นไหนก็ได้ (nemotron หลักมีปัญหา → lightning → ... → nous × 3 → gemini = ชั้นสุดท้าย)
 - **chain ล้มพร้อมกันหลายชั้น → รวมส่งข้อความเดียว** (ไม่สแปม 3 ข้อความรวด)
 - **cooldown 60 นาที** — แจ้งครั้งเดียวแล้วเงียบ (ปรับได้ด้วย `-CooldownMinutes`) กันสแปมตอน quota หมดทั้งวัน
 - **ใช้ byte-offset จำตำแหน่ง log ที่ตรวจแล้ว** → ตรวจซ้ำไม่แจ้งซ้ำ (ไม่สแปม)
@@ -240,11 +244,9 @@ schtasks /delete /TN HermesFallbackWatch /F
 
 ## ⚠️ ข้อควรรู้
 
-1. **เครื่องทำงานห้ามตั้ง sleep** — เครื่องบ้านใช้ local AI ผ่าน Tailscale ตลอดเวลา ต้องเปิดเครื่องค้างไว้
-2. **Tailscale**: ทั้ง 2 เครื่องต้อง login **บัญชีเดียวกัน** ถึงจะเห็นกัน (ถ้าคนละบัญชี = คนละ tailnet = ติดต่อกันไม่ได้)
-3. **เครื่องบ้านไม่ต้องลง LM Studio** — แค่ชี้ base_url มาที่เครื่องทำงาน (`100.77.88.33:1234`) — แต่ LM Studio ต้องตั้ง server ให้ bind `0.0.0.0` (ตั้งแล้วใน `lmstudio-start.ps1`)
-4. **OpenRouter free models** บางตัวรองรับ tool-calling ไม่ครบ — ถ้า bot ทำงานผิดปกติลอง `hermes fallback list` ดู
-5. **Telegram fallback IPs** ถูกตั้งไว้แล้ว (`149.154.166.110`, `149.154.167.220`) — ช่วยได้ถ้า Telegram โดนบล็อก DNS
+1. **ระบบเป็น API-only (v12)** — ไม่ต้องเปิด LM Studio / เครื่องทำงาน / Tailscale อีกแล้ว ทำงานได้ทุกที่ที่มีอินเทอร์เน็ต
+2. **OpenRouter free models** บางตัวรองรับ tool-calling ไม่ครบ — ถ้า bot ทำงานผิดปกติลอง `hermes fallback list` ดู
+3. **Telegram fallback IPs** ถูกตั้งไว้แล้ว (`149.154.166.110`, `149.154.167.220`) — ช่วยได้ถ้า Telegram โดนบล็อก DNS
 
 ---
 

@@ -60,7 +60,7 @@ python C:\AI_FACTORY\shared\tools\factory_manager.py list
 
 ## 🧠 AI ตอบด้วยโมเดลไหน (fallback chain)
 
-`shared\hermes_home\config.yaml` ตั้งไว้แล้ว **14 ระดับ** (orchestration-first) — ลำดับแรกที่ใช้ได้จะถูกใช้ (เรียงตามประสิทธิภาพ ตัวดีที่สุดมาก่อน):
+`shared\hermes_home\config.yaml` ตั้งไว้แล้ว **12 ระดับ — API เท่านั้น** (orchestration-first, 17 ส.ค. 2026 ลบ LM Studio ออกหมดแล้ว) — ลำดับแรกที่ใช้ได้จะถูกใช้ (เรียงตามประสิทธิภาพ ตัวดีที่สุดมาก่อน):
 
 | # | Provider | โมเดล | หมายเหตุ |
 |---|---|---|---|
@@ -76,11 +76,10 @@ python C:\AI_FACTORY\shared\tools\factory_manager.py list
 | ⑩ | Nous Portal (ฟรี) | `tencent/hy3:free` | 295B, agentic |
 | ⑪ | Nous Portal (ฟรี) | `stepfun/step-3.7-flash:free` | multimodal |
 | ⑫ | Gemini | `gemini-3.6-flash` | ใส่ `GEMINI_API_KEY` ใน .env |
-| ⑬ | LM Studio เครื่องทำงาน (Tailscale) | `qwen/qwen3.5-9b` | ต้องเปิด server ที่เครื่องทำงาน (`work-lmstudio-autostart.ps1`) |
-| ⑭ | LM Studio เครื่องนี้ (สำรองสุดท้าย) | `qwen/qwen3-1.7b` | เสปคต่ำ — ใช้ยามฉุกเฉินเท่านั้น |
 
 - **Nous ใช้ได้เฉพาะโมเดล `:free`** — ตัวเสียเงิน (เช่น `anthropic/claude-sonnet-4.6`) จะ error `requires credits` จนกว่าจะเติมเครดิตที่ portal.nousresearch.com
-- วิธีเช็คว่า bot ตอบผ่านโมเดลไหนจริง: Workthrough §10.4 (ดู `agent.log` grep `100.77.88.33:1234` สำหรับชั้นเครื่องทำงาน)
+- ⚠️ **ไม่ต้องใช้ LM Studio / Tailscale / เครื่องทำงานอีกแล้ว** — เหลือ API ล้วน (OpenRouter + Nous + Gemini)
+- วิธีเช็คว่า bot ตอบผ่านโมเดลไหนจริง: Workthrough §10.4 (ดู `agent.log` grep `provider=`)
 
 ---
 

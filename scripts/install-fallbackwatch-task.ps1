@@ -1,4 +1,4 @@
-﻿# ติดตั้ง Task Scheduler: HermesFallbackWatch — ตรวจ fallback (ทุกชั้น ถึง qwen3.5-9b/LM Studio) ทุก 1 นาที
+﻿# ติดตั้ง Task Scheduler: HermesFallbackWatch — ตรวจ fallback (ทุกชั้น API: openrouter → nous → gemini) ทุก 1 นาที
 # รันผ่าน wscript.exe + hidden-runner.vbs (window style 0) เพื่อไม่ให้หน้าต่าง console กระพริบ
 $ErrorActionPreference = 'Stop'
 
@@ -19,6 +19,6 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-    -Settings $settings -Description 'ตรวจ fallback ทุกชั้น (ถึง qwen3.5-9b/LM Studio) แล้วแจ้งเตือน Telegram' | Out-Null
+    -Settings $settings -Description 'ตรวจ fallback ทุกชั้น (openrouter → nous → gemini) แล้วแจ้งเตือน Telegram' | Out-Null
 
 Write-Output "Registered: $taskName (every 1 min)"

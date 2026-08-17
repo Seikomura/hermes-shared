@@ -1,7 +1,8 @@
 # Fallback AI Setup — สรุป config + คำสั่งเช็คสถานะ
 
-> เอกสารย่อของระบบ AI แบบหลายชั้น: **OpenRouter (หลัก — orchestration 8 ตัว) → Nous ฟรี ×3 → Gemini → LM Studio เครื่องทำงาน (Tailscale) → LM Studio เครื่องนี้ (สุดท้าย)**
-> Config หลัก: `shared/hermes_home/config.yaml` (วันที่อัปเดตล่าสุด 15 ส.ค. 2026)
+> เอกสารย่อของระบบ AI แบบหลายชั้น: **OpenRouter (หลัก — orchestration 8 ตัว) → Nous ฟรี ×3 → Gemini**
+> ⚠️ **17 ส.ค. 2026: ลบ LM Studio ออกหมดแล้ว (ทั้งเครื่องนี้ + เครื่องทำงานผ่าน Tailscale) — เหลือ API เท่านั้น** (ดู Workthrough §14 v12)
+> Config หลัก: `shared/hermes_home/config.yaml` (อัปเดตล่าสุด 17 ส.ค. 2026)
 > 📎 เอกสารเต็ม: [Workthrough.md](Workthrough.md) (§4 สิ่งที่ต้องเตรียม · **§10.5 วิธีเช็คว่า bot ตอบผ่านชั้นไหน** · §14 Changelog) · [README.md](README.md) · [Quick-Start.md](Quick-Start.md)
 
 ---
@@ -10,13 +11,14 @@
 
 | เครื่อง | บทบาท |
 |---|---|
-| **เครื่องบ้าน** (เครื่องนี้, `C:\AI_FACTORY`) | รัน Hermes gateway + bot Telegram (`@Yo_Factory_bot`) — ใช้ cloud เป็นหลัก, local เป็นสำรอง |
-| **เครื่องทำงาน** (`100.77.88.33` ผ่าน Tailscale) | LM Studio + `qwen/qwen3.5-9b` (port 1234) — ชั้น local fallback |
+| **เครื่องบ้าน** (เครื่องนี้, `C:\AI_FACTORY`) | รัน Hermes gateway + bot Telegram (`@Yo_Factory_bot`) — ใช้ cloud API ทั้งหมด (OpenRouter + Nous + Gemini) |
 | **Nous Portal** | subscription (OAuth) — ตอนนี้ใช้ได้เฉพาะโมเดล **`:free`** (ยังไม่มีเครดิต) |
+
+> ระบบไม่พึ่งเครื่องอื่น/Local AI อีกแล้ว — ทำงานได้แม้เครื่องทำงานปิด
 
 ---
 
-## 📋 Fallback chain ไฟนอล (primary + 13 ชั้น — orchestration-first)
+## 📋 Fallback chain ไฟนอล (primary + 11 ชั้น — orchestration-first, API เท่านั้น)
 
 | ลำดับ | provider | model | หมายเหตุ |
 |---|---|---|---|
@@ -32,11 +34,9 @@
 | 9 | nous | `tencent/hy3:free` | 295B reasoning + agentic |
 | 10 | nous | `stepfun/step-3.7-flash:free` | multimodal + reasoning |
 | 11 | gemini | `gemini-3.6-flash` | AI Studio — ใช้ `GEMINI_API_KEY` |
-| 12 | custom | `qwen/qwen3.5-9b` @ `100.77.88.33:1234` | LM Studio เครื่องทำงาน (Tailscale) |
-| 13 | lmstudio | `qwen/qwen3-1.7b` @ `127.0.0.1:1234` | **เครื่องนี้ — อันดับสุดท้าย** |
 
 - `auxiliary.compression` ใช้ OpenRouter ฟรี (context 1M) — ไม่แตะ
-- `custom_providers`: `lmstudio-work` (งาน, 64K) + `lmstudio-local` (เครื่องนี้, 32K)
+- **ไม่มี `custom_providers` อีกแล้ว** (ถอดออกพร้อม LM Studio)
 - fallback เป็นแบบ **per-turn** — ทุกข้อความใหม่เริ่มที่ Nemotron 3 Ultra (OpenRouter) ก่อนเสมอ
 
 ---
@@ -45,18 +45,14 @@
 
 | ตรวจอะไร | คำสั่ง (PowerShell/CMD) |
 |---|---|
-| Chain fallback ปัจจุบัน | `hermes fallback list` |
+| Chain fallback ปัจจุบัน (12 ชั้น) | `hermes fallback list` |
 | โมเดล orchestration ทั้ง 8 ตัว พร้อมไหม (availability + latency) | `python C:\AI_FACTORY\shared\tools\model-health-check.py` — ผ่านหมด = exit 0; 429 = rate-limit ชั่วคราว; เพิ่ม `--json` สำหรับ automation |
 | Credentials (gemini/openrouter/nous) | `hermes auth list` |
 | สถานะ Nous Portal (login/subscription) | `hermes portal info` |
-| เครื่องทำงาน LM Studio พร้อมไหม | `curl http://100.77.88.33:1234/v1/models` (ควรเห็น `qwen/qwen3.5-9b`) |
-| LM Studio เครื่องนี้ | `curl http://127.0.0.1:1234/v1/models` |
-| Tailscale เชื่อมต่อไหม | `tailscale status` |
 | Gateway ทำงาน/เชื่อม Telegram หรือยัง | `Get-Content "C:\AI_FACTORY\shared\hermes_home\state\gateway.lifecycle.json"` |
-| Bot ตอบผ่านชั้นไหนล่าสุด | `Get-Content "C:\AI_FACTORY\shared\hermes_home\logs\agent.log" -Tail 50 \| Select-String "turn:\|API call #1:\|Fallback activated\|100.77.88.33:1234"` — อธิบายแต่ละบรรทัด: **Workthrough §10.5** |
-| แจ้งเตือนอัตโนมัติเมื่อตกถึงชั้น lmstudio ⑭ | `python C:\AI_FACTORY\shared\tools\lmstudio-alert.py --dry-run` (แสดงว่าจะส่งอะไร) — รันอัตโนมัติทุก 2 นาทีผ่าน HermesGatewayWatch; state: `logs\.lmstudio_alert_state.json` |
+| Bot ตอบผ่านชั้นไหนล่าสุด | `Get-Content "C:\AI_FACTORY\shared\hermes_home\logs\agent.log" -Tail 50 \| Select-String "turn:\|API call #1:\|Fallback activated"` — อธิบายแต่ละบรรทัด: **Workthrough §10.5** |
 | ทดสอบคุยตรงผ่าน Nous ฟรี | `hermes chat -q "ตอบว่า OK" -Q --provider nous -m upstage/solar-pro4:free --max-turns 2` |
-| ทดสอบคุยตรงผ่านเครื่องทำงาน | `hermes chat -q "ตอบว่า OK" -Q --provider lmstudio-work -m qwen/qwen3.5-9b --max-turns 2` |
+| ทดสอบคุยตรงผ่าน Gemini | `hermes chat -q "ตอบว่า OK" -Q --provider gemini -m gemini-3.6-flash --max-turns 2` |
 | โมเดลฟรีทั้งหมดของ Nous | `curl -s https://inference-api.nousresearch.com/v1/models` (ดูตัวที่ pricing = 0) |
 
 > 💡 คำสั่ง `hermes ...` ต้องตั้งค่า `$hermes` ก่อน (ดู Workthrough §5.2):
@@ -68,21 +64,12 @@
 
 ---
 
-## 📜 สคริปต์ที่เกี่ยวข้อง
-
-| ไฟล์ | สำหรับ | ใช้ที่ไหน |
-|---|---|---|
-| `shared/tools/work-lmstudio-autostart.ps1` | เปิด LM Studio + โหลด qwen3.5-9b + server (bind 0.0.0.0) อัตโนมัติตอน login | **เครื่องทำงาน** (คัดลอกไป) |
-| `Downloads/home-use-work-local.ps1` | เปลี่ยน config เครื่องบ้านให้ชี้ LM Studio เครื่องทำงาน + restart | **เครื่องบ้าน** |
-
----
-
 ## ⚠️ ข้อควรจำ
 
-1. **เครื่องทำงานต้องเปิดค้างไว้ + LM Studio รันตลอด** — ไม่งั้นชั้น 6 ใช้ไม่ได้ (ชั้น cloud ยังทำงาน)
+1. **ระบบเป็น API 100% (v12)** — ไม่ต้องเปิด LM Studio / เครื่องทำงาน / Tailscale อีกแล้ว; ทำงานได้ทุกที่ที่มีอินเทอร์เน็ต
 2. **Nous ยังไม่มีเครดิต** — ใช้ได้เฉพาะตัว `:free` (solar-pro4 / hy3 / stepfun); ตัวเสียเงิน (เช่น claude-sonnet-4.6) จะ error 404 `requires credits` — เติมเครดิตที่ portal.nousresearch.com ถ้าอยากใช้
-3. **อย่าใช้ `--provider custom` ในการทดสอบ** — มัน resolve ไป OpenRouter; ใช้ `--provider lmstudio-work` ถึงจะไปเครื่องทำงานจริง
-4. ตรวจว่า bot ตอบผ่านเครื่องทำงานจริง: grep `100.77.88.33:1234` ใน `logs\agent.log` (วิธีละเอียด + ตัวอย่างบรรทัด log: **Workthrough §10.5**)
+3. **Gemini ต้องมี `GEMINI_API_KEY`** ใน `shared\hermes_home\.env` ถึงจะใช้ชั้น ⑫ ได้ — ไม่มี key Hermes จะข้ามไป (แต่ถ้าเป็นชั้นสุดท้ายจะค้าง timeout)
+4. ตรวจว่า bot ตอบผ่านชั้นไหน: grep `provider=` ใน `logs\agent.log` (วิธีละเอียด + ตัวอย่างบรรทัด log: **Workthrough §10.5**)
 
 ---
 

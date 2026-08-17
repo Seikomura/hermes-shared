@@ -5,7 +5,7 @@
 # - HermesGatewayLogonKick: restart gateway ทันทีที่ login (ถ้าตายค้างจากคืนก่อน)
 # - HermesHealthCheck     : ตรวจสุขภาพทุก 30 นาที -> แจ้ง Telegram (เฉพาะมีปัญหา)
 # - HermesFallbackWatch   : แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น (ทุก 1 นาที)
-# - LMStudioWatch         : (เฉพาะเครื่องที่มี LM Studio — เครื่องบ้านที่ไม่มีจะข้ามให้อัตโนมัติ)
+# (v12: ลบ LMStudioWatch ออกแล้ว — ระบบเป็น API-only ไม่ใช้ LM Studio อีก)
 #
 # รันเองได้ หรือ sync.ps1 -Scripts จะเรียกให้อัตโนมัติ
 #   powershell -ExecutionPolicy Bypass -File install-tasks.ps1 -HERMES_HOME 'C:\AI Factory'
@@ -87,32 +87,7 @@ Ensure-Task 'HermesFallbackWatch' {
         -Description 'ตรวจ fallback ทุกชั้น แล้วแจ้งเตือน Telegram' -Force | Out-Null
 } 'fallback-watch ทุก 1 นาที'
 
-# 5) LMStudioWatch — เฉพาะเครื่องที่พบ lms.exe (เครื่องบ้านที่ไม่มี LM Studio จะข้ามให้อัตโนมัติ)
-$lms = $null
-$candidates = @(
-    (Join-Path $env:USERPROFILE '.lmstudio\bin\lms.exe'),
-    'C:\Users\Public\.lmstudio\bin\lms.exe',
-    "$env:ProgramFiles\LM Studio\lms.exe",
-    "$env:LOCALAPPDATA\Programs\LM Studio\lms.exe"
-)
-foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { $lms = $c; break } }
-if (-not $lms) { $lms = (Get-Command lms.exe -ErrorAction SilentlyContinue) }
-
-if ($lms) {
-    Ensure-Task 'LMStudioWatch' {
-        $a = New-WatchAction 'lmstudio-watch.ps1'
-        $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-            -RepetitionInterval (New-TimeSpan -Minutes 2) `
-            -RepetitionDuration (New-TimeSpan -Days 3650)
-        Register-ScheduledTask -TaskName 'LMStudioWatch' -Action $a -Trigger $t `
-            -Settings (New-WatchSettings 5) `
-            -Description 'LM Studio watchdog — restart ถ้า server/โมเดลหลุด' -Force | Out-Null
-    } 'LMStudio watchdog (พบ lms.exe)'
-} else {
-    Write-Host "  SKIP: LMStudioWatch — ไม่พบ LM Studio บนเครื่องนี้ (เครื่องบ้านข้ามถูกต้อง)" -ForegroundColor DarkGray
-}
-
-# 6) เช็ค task หลัก HermesGateway (gateway-watch.ps1 ใช้ restart ผ่าน task นี้)
+# 5) เช็ค task หลัก HermesGateway (gateway-watch.ps1 ใช้ restart ผ่าน task นี้)
 $gw = Get-ScheduledTask -TaskName 'HermesGateway' -ErrorAction SilentlyContinue
 if (-not $gw) {
     Write-Host "  ⚠️ ไม่พบ task HermesGateway — gateway-watch.ps1 ใช้ task นี้ในการ restart" -ForegroundColor Yellow

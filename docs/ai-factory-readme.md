@@ -138,7 +138,7 @@ Streams Gateway events live. Use it first when the bot does not connect or reply
 
 ## Current provider configuration
 
-Models are configured as an **OpenRouter primary + 13-tier fallback chain** (orchestration-first) in `shared\hermes_home\config.yaml`:
+Models are configured as an **OpenRouter primary + 11-tier fallback chain — API only** (orchestration-first, LM Studio/Tailscale removed on 17 Aug 2026 — see Workthrough v12) in `shared\hermes_home\config.yaml`:
 
 1. **OpenRouter** (primary, free): `nvidia/nemotron-3-ultra-550b-a55b:free` — 550B (55B active), 1M context, built for **agent orchestration** / coding / deep research.
 2. **OpenRouter free**: `nvidia/nemotron-3.5-lightning:free` — 1M context, frontier reasoning, newest model (verified: ~13.1s API latency via real Telegram test).
@@ -152,10 +152,8 @@ Models are configured as an **OpenRouter primary + 13-tier fallback chain** (orc
 10. **Nous Portal free #2**: `tencent/hy3:free` — 295B MoE, 262K context, agentic/tool workflows (verified: ~6.1s).
 11. **Nous Portal free #3**: `stepfun/step-3.7-flash:free` — multimodal + reasoning (verified: ~7.8s).
 12. **Gemini** (native API): `gemini-3.6-flash` — uses `GEMINI_API_KEY` from `shared\hermes_home\.env`. Until the key is set, Hermes automatically skips to the free tiers above (verified: fallback entries without keys are skipped).
-13. **LM Studio on the work PC** (via Tailscale): `qwen/qwen3.5-9b` as `provider: custom` at `http://100.77.88.33:1234/v1` (entry `lmstudio-work` in `custom_providers`) — requires the work machine's LM Studio server to be running (auto-start: `shared\tools\work-lmstudio-autostart.ps1`).
-14. **LM Studio on this machine** (last resort): `qwen/qwen3-1.7b` at `http://127.0.0.1:1234/v1` — LM Studio needs no API key (Hermes auto-uses a no-auth placeholder).
 
-**Notes on the local tiers (⑬⑭):** ⚠️ The fallback path does **not** recognize `provider: ollama` — use **`provider: custom`** + `base_url` for the work PC instead (verified: replies in ~28s via LM Studio over Tailscale). Both local `custom_providers` entries set `context_length` (65536 for the work qwen3.5-9b, 32768 for this machine's qwen3-1.7b) so they clear the Hermes 64K floor; `auxiliary.compression` points at the **free OpenRouter** model since compression has no bypass and needs ≥64K. ⚠️ **After any LM Studio restart the model reloads at the default 8192 context** — reload at the configured size with the bundled CLI: `lms load qwen/qwen3-1.7b -c 32768 -y` (check with `lms ps`), or set the Context Length in the LM Studio GUI; otherwise Hermes hits `Context length exceeded` on long prompts. ⚠️ Both local models are small: Qwen3-1.7b is a **slow reasoning model** (5–10 min/turn on long prompts) — treat tiers ⑬⑭ as emergency fallbacks only, not for daily work.
+> ⚠️ **LM Studio tiers removed (17 Aug 2026, Workthrough v12):** the old tiers ⑬⑭ (work PC via Tailscale `qwen/qwen3.5-9b` and this machine's `qwen/qwen3-1.7b`) plus the `custom_providers` entries were **removed** — the system is now API-only (OpenRouter + Nous + Gemini). No LM Studio / Tailscale / work-PC dependency remains; `lmstudio-alert.py`, `lmstudio-watch.ps1` and `HermesLMStudioWatch` are deleted. History of why (CPU-only too slow, RAM pressure) is preserved in Workthrough §14 v8–v10.
 
 > 💡 Nous Portal free models only work via the `nous` provider (OAuth login once: `hermes auth add nous`); paid models (e.g. `anthropic/claude-sonnet-4.6`) return `requires credits` until you top up at portal.nousresearch.com.
 

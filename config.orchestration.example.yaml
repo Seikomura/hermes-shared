@@ -1,7 +1,7 @@
 # ============================================================
-# config.orchestration.example.yaml — Fallback chain แบบ agent orchestration (14 ระดับ)
+# config.orchestration.example.yaml — Fallback chain แบบ agent orchestration (12 ระดับ — API เท่านั้น)
 #
-# ต้นฉบับ: เครื่องบ้าน (AI FACTORY) — 15 ส.ค. 2026
+# ต้นฉบับ: เครื่องบ้าน (AI FACTORY) — 17 ส.ค. 2026 (v12: ลบ LM Studio ออกหมดแล้ว — ไม่มี local/Tailscale)
 # แชร์ให้เครื่องทำงานใช้ผ่าน repo hermes-shared (ดู README.md หัวข้อ "🎯 Fallback chain orchestration")
 #
 # ⚠️⚠️⚠️ ไฟล์นี้เป็น TEMPLATE — ไม่มี secret ใดๆ (API key ทั้งหมดอยู่ใน .env ของแต่ละเครื่อง)
@@ -12,8 +12,7 @@
 #        copy C:\AI Factory\config.yaml  C:\AI Factory\config.yaml.bak-<วันที่>
 #   2) คัดลอก template นี้ไปทับ:
 #        copy config.orchestration.example.yaml  C:\AI Factory\config.yaml
-#   3) ปรับชั้น LM Studio ท้ายสุด (⑬⑭) + custom_providers ให้เป็นของเครื่องตัวเอง
-#      (เครื่องทำงาน: qwen/qwen3.5-9b @ 127.0.0.1:1234 = LM Studio ของตัวเอง — ดูคอมเมนต์ข้างล่าง)
+#   3) ตรวจ .env มี OPENROUTER_API_KEY (จำเป็น) + GEMINI_API_KEY (ถ้ามี) — ระบบ API-only ไม่ต้องตั้งค่า local อะไรเพิ่ม
 #   4) รีสตาร์ท gateway ผ่าน task ของเครื่อง
 #   5) ตรวจ:  hermes fallback list  +  python scripts\model-health-check.py  (ควรเห็น 8/8 OK)
 # ============================================================
@@ -57,39 +56,12 @@ fallback_providers:
   # Google AI Studio (Gemini) — fallback หลัง Nous (ต้องมี GEMINI_API_KEY ใน .env)
   - provider: gemini
     model: gemini-3.6-flash
-  # ⚠️ ชั้น LM Studio ต่อเครื่อง — ปรับให้ตรงเครื่องตัวเอง:
-  #    เครื่องทำงาน: ใช้ LM Studio ของตัวเอง → base_url: http://127.0.0.1:1234/v1 (qwen/qwen3.5-9b)
-  #    เครื่องบ้าน:   ใช้ของเครื่องทำงานผ่าน Tailscale → http://100.77.88.33:1234/v1
-  #                  + เครื่องนี้ (qwen/qwen3-1.7b @ 127.0.0.1) เป็นชั้นสุดท้าย
-  # LM Studio (เครื่องทำงาน ผ่าน Tailscale) — ใช้ provider: custom (ระบุ base_url ตรง ๆ)
-  - provider: custom
-    model: qwen/qwen3.5-9b
-    base_url: http://100.77.88.33:1234/v1
-  # LM Studio (เครื่องนี้) — อันดับสุดท้าย (เสปคต่ำ)
-  - provider: lmstudio
-    model: qwen/qwen3-1.7b
-    base_url: http://127.0.0.1:1234/v1
 
 auxiliary:
   compression:
-    # ใช้ OpenRouter ฟรี (context 1M) — ตัว local ตัวเล็ก (32K) ต่ำกว่าเกณฑ์ 64K ของ Hermes
+    # ใช้ OpenRouter ฟรี (context 1M) — ผ่านเกณฑ์ 64K ของ Hermes
     provider: openrouter
     model: nvidia/nemotron-3-ultra-550b-a55b:free
-
-custom_providers:
-  # ⚠️ ปรับให้ตรงเครื่องตัวเองด้วย (เครื่องทำงาน: มี LM Studio ของตัวเองที่ 127.0.0.1)
-  # LM Studio (เครื่องทำงาน ผ่าน Tailscale) — qwen/qwen3.5-9b (context ตาม LM Studio, ตั้งเผื่อ 64K)
-  - name: lmstudio-work
-    base_url: http://100.77.88.33:1234/v1
-    models:
-      qwen/qwen3.5-9b:
-        context_length: 65536
-  # LM Studio (เครื่องนี้) — context_length ตามที่โหลดจริงใน LM Studio
-  - name: lmstudio-local
-    base_url: http://127.0.0.1:1234/v1
-    models:
-      qwen/qwen3-1.7b:
-        context_length: 32768
 
 terminal:
   backend: local

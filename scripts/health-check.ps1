@@ -7,12 +7,11 @@
     1. Heartbeat      — gateway ยัง alive ไหม (updated_at สดหรือเก่า)
     2. Process        — มี hermes.exe / python.exe (gateway) รันอยู่ไหม
     3. Gateway log    — log มีกิจกรรมล่าสุดไหม + เชื่อมต่อ Telegram หรือยัง
-    4. Fallback chain — หลัก + fallback ครบไหม (gemini → nous → openrouter → qwen3.5-9b)
-    5. LM Studio      — local AI (qwen3.5-9b) ผ่าน Tailscale IP ตอบหรือยัง
-    6. Tailscale      — VPN เชื่อมต่อไหม (เครื่องบ้านต่อถึงหรือยัง)
-    7. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
-    8. .env keys      — มี GOOGLE_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
-    9. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
+    4. Fallback chain — หลัก + fallback ครบไหม (openrouter → nous → gemini — API เท่านั้น)
+    5. Tailscale      — VPN เชื่อมต่อไหม (เหลือไว้ตรวจเฉยๆ — ระบบไม่พึ่งเครื่องทำงานอีกแล้ว)
+    6. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
+    7. .env keys      — มี GEMINI_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
+    8. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
 
   อ่านเอกสาร workthrough.md สำหรับวิธีแก้ไขเมื่อเจอปัญหา
 
@@ -52,8 +51,6 @@ foreach ($c in @(
 )) { if ($c -and (Test-Path $c)) { $HERMES = $c; break } }
 if (-not $HERMES) { $HERMES = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe' }
 
-$LMS_IP      = '100.77.88.33'           # Tailscale IP ของเครื่องทำงาน (LM Studio qwen3.5-9b)
-$LMS_PORT    = 1234                        # port ของ LM Studio server
 $env:HERMES_HOME = $HERMES_HOME
 
 # ── ตัวเก็บผลลัพธ์ ─────────────────────────────────────────────────
@@ -171,17 +168,13 @@ if ($fb) {
     $okGemini     = $fb -match 'gemini'
     $okNous       = $fb -match 'solar-pro4'
     $okOpenRouter = $fb -match 'nemotron'
-    $okQwen       = $fb -match 'qwen3.5-9b'
-    $okUrl        = $fb -match '100\.77\.88\.33:1234'
-    if ($okGemini -and $okNous -and $okOpenRouter -and $okQwen -and $okUrl) {
-        Add-Check 'Fallback chain' 'OK' 'หลัก gemini + fallback ครบ (nous → openrouter → qwen3.5-9b) + base_url ถูกต้อง'
+    if ($okGemini -and $okNous -and $okOpenRouter) {
+        Add-Check 'Fallback chain' 'OK' 'หลัก openrouter (nemotron) + fallback ครบ (nous → gemini)'
     } else {
         $missing = @()
-        if (-not $okGemini)     { $missing += 'gemini (หลัก)' }
-        if (-not $okNous)       { $missing += 'nous (solar-pro4)' }
         if (-not $okOpenRouter) { $missing += 'openrouter (nemotron)' }
-        if (-not $okQwen)       { $missing += 'qwen3.5-9b' }
-        if (-not $okUrl)        { $missing += 'base_url 100.77.88.33:1234' }
+        if (-not $okNous)       { $missing += 'nous (solar-pro4)' }
+        if (-not $okGemini)     { $missing += 'gemini' }
         Add-Check 'Fallback chain' 'WARN' ("ไม่ครบ/ผิดปกติ: ขาด {0}" -f ($missing -join ', '))
         Add-Check 'Fallback chain' 'INFO' 'รัน "hermes fallback list" เพื่อดูรายละเอียด'
     }
@@ -189,41 +182,21 @@ if ($fb) {
     Add-Check 'Fallback chain' 'CRIT' "ไม่พบ hermes.exe ที่ $HERMES"
 } else {
     Add-Check 'Fallback chain' 'WARN' 'hermes fallback list ไม่ตอบภายใน 20 วิ (hermes อาจค้าง)'
-}
-
-# ══════════════════════ 5) LM STUDIO (LOCAL AI) ══════════════════════
-# LM Studio รัน OpenAI-compatible API บน port 1234 (bind 0.0.0.0 ให้เครื่องบ้านต่อผ่าน Tailscale ได้)
-$lmsOk = $false
-try {
-    $v = Invoke-RestMethod -Uri "http://${LMS_IP}:${LMS_PORT}/v1/models" -TimeoutSec 5
-    $ids = @($v.data | ForEach-Object { $_.id })
-    Add-Check 'LM Studio' 'OK' "ตอบแล้ว (${LMS_IP}:${LMS_PORT} — โมเดล: $($ids -join ', '))"
-    $lmsOk = $true
-} catch {
-    try {
-        $v2 = Invoke-RestMethod -Uri "http://localhost:${LMS_PORT}/v1/models" -TimeoutSec 4
-        $ids2 = @($v2.data | ForEach-Object { $_.id })
-        Add-Check 'LM Studio' 'WARN' "localhost ตอบ แต่ Tailscale IP ไม่ตอบ — เครื่องบ้านจะต่อไม่ได้ (โมเดล: $($ids2 -join ', '))"
-        $lmsOk = $true
-    } catch {
-        Add-Check 'LM Studio' 'CRIT' "ต่อไม่ได้ (${LMS_IP}:${LMS_PORT} + localhost:${LMS_PORT}) — LM Studio ปิดอยู่? ดู workthrough ส่วน F"
-    }
-}
-
-# ══════════════════════ 6) TAILSCALE ══════════════════════
+}# ══════════════════════ 5) TAILSCALE ══════════════════════
+# ระบบเป็น API-only แล้ว (v12) — ไม่ต้องพึ่งเครื่องทำงาน/LM Studio; เช็คไว้เฉยๆ เป็น INFO
 $tsExe = 'C:\Program Files\Tailscale\tailscale.exe'
 if (Test-Path $tsExe) {
     $tsIp = (& $tsExe ip -4 2>&1 | Select-Object -First 1)
     if ($tsIp -match '^100\.') {
-        Add-Check 'Tailscale' 'OK' "เชื่อมต่อ (IP: $tsIp)"
+        Add-Check 'Tailscale' 'INFO' "เชื่อมต่อ (IP: $tsIp) — ไม่ได้ใช้กับ chain อีกแล้ว (API-only)"
     } else {
-        Add-Check 'Tailscale' 'WARN' "tailscale ไม่ตอบ IP: $tsIp — เครื่องบ้านต่อ local AI ไม่ได้"
+        Add-Check 'Tailscale' 'INFO' "tailscale ไม่ตอบ IP: $tsIp — ไม่กระทบ (API-only)"
     }
 } else {
-    Add-Check 'Tailscale' 'WARN' 'ไม่พบ tailscale.exe (ถ้าไม่ได้ใช้ local AI ข้ามได้)'
+    Add-Check 'Tailscale' 'INFO' 'ไม่พบ tailscale.exe — ไม่กระทบ (API-only)'
 }
 
-# ══════════════════════ 7) TASK SCHEDULER ══════════════════════
+# ══════════════════════ 6) TASK SCHEDULER ══════════════════════
 # รองรับทั้ง task HermesGateway (เครื่องทำงาน) และ AI_Factory_Gateway (เครื่องบ้าน)
 $taskOut = (schtasks /query /TN HermesGateway /V /FO LIST 2>&1 | Out-String)
 if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
@@ -243,7 +216,7 @@ if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
     }
 }
 
-# ══════════════════════ 8) .env KEYS (ชื่อเท่านั้น!) ══════════════════════
+# ══════════════════════ 7) .env KEYS (ชื่อเท่านั้น!) ══════════════════════
 $envFile = Join-Path $HERMES_HOME '.env'
 if (Test-Path $envFile) {
     $envTxt = Get-Content $envFile -Raw
@@ -258,7 +231,7 @@ if (Test-Path $envFile) {
     Add-Check '.env' 'CRIT' "ไม่พบไฟล์ .env ที่ $HERMES_HOME"
 }
 
-# ══════════════════════ 9) ERRORS ล่าสุด ══════════════════════
+# ══════════════════════ 8) ERRORS ล่าสุด ══════════════════════
 $errLog = Join-Path $HERMES_HOME 'logs\errors.log'
 if (Test-Path $errLog) {
     $recentErrs = @()

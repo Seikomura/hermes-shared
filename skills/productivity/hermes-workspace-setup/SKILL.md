@@ -56,25 +56,28 @@ $HERMES_HOME\
 
 ## Part D — The fallback model chain (config.yaml)
 
-The current production chain (all in `config.yaml` — `primary` + `fallback` list):
+The current production chain (all in `config.yaml` — `primary` + `fallback` list). **API-only since v12 (17 Aug 2026): LM Studio / Tailscale / work-PC tiers were removed** — see Workthrough §14 v12:
 
 | # | Provider | Model | Notes |
 |---|---|---|---|
-| Primary | gemini | `gemini-3.6-flash` | needs `GEMINI_API_KEY` in `.env` |
-| 1 | nous | `upstage/solar-pro4:free` | 524K context — best for long work |
-| 2 | nous | `tencent/hy3:free` | 295B MoE, agentic, 262K context |
-| 3 | nous | `stepfun/step-3.7-flash:free` | multimodal |
-| 4 | openrouter | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1M context |
-| 5 | openrouter | `nvidia/nemotron-3-super-120b-a12b:free` | |
-| 6 | custom | `qwen/qwen3.5-9b` @ `http://100.77.88.33:1234/v1` | work PC via Tailscale |
-| 7 | lmstudio | `qwen/qwen3-1.7b` @ `http://127.0.0.1:1234/v1` | this machine, last resort |
+| Primary | openrouter | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1M context, agent orchestration |
+| 1 | openrouter | `nvidia/nemotron-3.5-lightning:free` | 1M ctx, reasoning, newest |
+| 2 | openrouter | `poolside/laguna-s-2.1:free` | agentic coding |
+| 3 | openrouter | `nvidia/nemotron-3-super-120b-a12b:free` | MTP, accuracy |
+| 4 | openrouter | `cohere/north-mini-code:free` | JSON tool use |
+| 5 | openrouter | `openai/gpt-oss-20b:free` | function calling |
+| 6 | openrouter | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | multimodal |
+| 7 | openrouter | `google/gemma-4-26b-a4b-it:free` | function calling |
+| 8 | nous | `upstage/solar-pro4:free` | 524K context — best for long work |
+| 9 | nous | `tencent/hy3:free` | 295B MoE, agentic, 262K context |
+| 10 | nous | `stepfun/step-3.7-flash:free` | multimodal |
+| 11 | gemini | `gemini-3.6-flash` | needs `GEMINI_API_KEY` in `.env` |
 
 ### Provider gotchas (learned the hard way)
 
-1. **`provider: custom` is NOT "a local provider".** The fallback path resolves `custom` with `base_url` for the API call, but the **CLI `--provider custom` flag resolves to OpenRouter** — it never reaches the local server. To test a local model directly use `--provider nous -m upstage/solar-pro4:free` or `--provider lmstudio-work` (the named entry in `custom_providers`). `--provider ollama` does **not exist** → `Fallback to ollama failed: provider not configured`. Use `custom` + `base_url`.
-2. **Nous portal**: login once with `hermes auth add nous` (OAuth). Only `:free` models are usable without credits — paid models error with `requires credits`. Free choices tested: `solar-pro4:free`, `hy3:free`, `step-3.7-flash:free`.
-3. **Context floor**: Hermes requires ≥64K context per model. Small local models that report less (e.g. `qwen3:8b` reports 40960) must be given `context_length: 65536` in `custom_providers` to clear the floor; `auxiliary.compression` needs ≥64K too (point it at a free OpenRouter model if locals are too small).
-4. **LM Studio reloads at default context after restart** — reload with `lms load <model> -c 32768 -y` or set Context Length in the GUI, else long prompts hit `Context length exceeded`.
+1. **Nous portal**: login once with `hermes auth add nous` (OAuth). Only `:free` models are usable without credits — paid models error with `requires credits`. Free choices tested: `solar-pro4:free`, `hy3:free`, `step-3.7-flash:free`.
+2. **Gemini** needs `GEMINI_API_KEY` in `shared\hermes_home\.env`; without a key Hermes skips the tier automatically.
+3. **All tiers are remote APIs now** — no local server to keep running, no `custom_providers` entries, no Tailscale dependency. (History of the removed LM Studio tiers: Workthrough §14 v8–v10.)
 
 ### Verify the chain
 
@@ -83,13 +86,9 @@ export HERMES_HOME='C:/AI_FACTORY/shared/hermes_home'
 "$LOCALAPPDATA/hermes/hermes-agent/venv/Scripts/hermes.exe" fallback list
 ```
 
-## Part E — Cross-machine local AI over Tailscale
+## Part E — (removed in v12 — was "Cross-machine local AI over Tailscale")
 
-- Work PC runs LM Studio bound to **0.0.0.0** on port **1234** so the home machine can reach it via Tailscale IP `100.77.88.33`:
-  `lms server start -p 1234 --bind 0.0.0.0` + `lms load qwen/qwen3.5-9b -c 65536 -y`.
-- `scripts\work-lmstudio-autostart.ps1` does this automatically at logon on the work PC (with RAM/VRAM fallback to `-c 32768`); install with `schtasks /create /tn "LMStudioAutostart" ... /sc onlogon /rl highest`. (The repo's alternative `lmstudio-start.ps1` + `LMStudioWatch` is the office-machine flavour.)
-- `scripts\home-use-work-local.ps1` (run on the HOME machine) points only the **local fallback tier** of `config.yaml` at the work PC (auto-backup first, never touches other providers, `.env` or `auth.json`).
-- Reachability check: `curl -s -m 8 http://100.77.88.33:1234/v1/models` → should list `qwen/qwen3.5-9b`.
+> LM Studio tiers (work PC `qwen/qwen3.5-9b` via Tailscale + this machine's `qwen/qwen3-1.7b`) were **removed on 17 Aug 2026** — the system is API-only. Related files deleted: `lmstudio-watch.ps1`, `lmstudio-alert.py`, `lmstudio-start.ps1`, `work-lmstudio-autostart.ps1`, `home-use-work-local.ps1`, `setup-home-machine.ps1` + task `HermesLMStudioWatch`. See Workthrough §14 v12 for the reasoning.
 
 ## Part F — Sharing skills & scripts via hermes-shared
 
@@ -117,6 +116,6 @@ work machine ◄─────────► home machine
 2. `state\gateway.heartbeat` age — < 4 min?
 3. `logs\gateway.log` / `logs\errors.log` tail — errors?
 4. `hermes fallback list` — chain intact?
-5. `curl -s -m 8 http://100.77.88.33:1234/v1/models` — work PC up?
+5. (Removed — no work-PC check needed since v12; the chain is API-only.)
 
 See `docs\workthrough.md` (Hermes troubleshooting) and `docs\ai-factory-workthrough.md` §10.5 (how to read `agent.log` to find which tier answered a Telegram turn).
