@@ -50,16 +50,15 @@ Telegram ──(proxy 8899, IPv4)──▶ Hermes Gateway ──▶ fallback cha
 Watcher/Tasks (Task Scheduler):
   AI_Factory_Gateway     bat watchdog — spawn gateway + restart เองถ้าตาย (หลัก)
   HermesGatewayWatch     ทุก 2 นาที — ฆ่า gateway ค้าง + self-heal proxy 8899
-  HermesFallbackWatch    ทุก 1 นาที — แจ้งเตือน Telegram เมื่อ fallback activated (cooldown 60 นาที)
-  HermesHealthCheck      ทุก 30 นาที — รายงานสุขภาพระบบ → Telegram (มีปัญหาเท่านั้น)
+  HermesFallbackWatch    ทุก 1 นาที — แจ้งเตือนเมื่อ fallback activated + แนบ Health Check ย่อ (v12.1 — แทน HermesHealthCheck)
 ```
 
-### กลไกกัน bot เงียบ (3 ชั้น)
+### กลไกกัน bot เงียบ (2 ชั้นหลัก)
 | ชั้น | กลไก | กู้คืนภายใน |
 |---|---|---|
 | ① | `gateway-watch.ps1` — ฆ่า gateway ค้าง + proxy self-heal ทุก 2 นาที | ≤2 นาที |
 | ② | `start_gateway.bat` — `:ensure_proxy` + restart gateway เมื่อ exit | ทันที |
-| ③ | `HermesHealthCheck` — เช็คครบ (heartbeat/process/proxy 8899/chain/keys/errors) | ≤30 นาที + แจ้งเตือน |
+| ③ | (แจ้งเตือน) `fallback-watch.ps1` — fallback activated → แนบ Health Check ย่อ (v12.1) | เมื่อเปลี่ยนโมเดล |
 
 ### ⚠️ กฎสำคัญ (บทเรียน v7 + v11)
 - **อย่า** `schtasks /run` watcher ซ้อน bat loop → 2 gateway เขียน heartbeat ไฟล์เดียวกัน → JSON เพี้ยน → restart วน
@@ -75,7 +74,7 @@ Watcher/Tasks (Task Scheduler):
 | `shared\tools\start_gateway.bat` | start gateway + watchdog loop + proxy self-heal |
 | `shared\hermes_home\gateway-watch.ps1` | ทุก 2 นาที: ฆ่า gateway ค้าง + proxy self-heal |
 | `shared\hermes_home\health-check.ps1` | เช็คสุขภาพครบวงจร (exit 0/1/2) |
-| `shared\hermes_home\fallback-watch.ps1` | แจ้งเตือน fallback activated (cooldown 60 นาที) |
+| `shared\hermes_home\fallback-watch.ps1` | แจ้งเตือน fallback activated + แนบ Health Check ย่อ (cooldown 60 นาที) |
 | `shared\tools\model-health-check.py` | ตรวจ availability + latency โมเดล orchestration 8 ตัว |
 | `shared\tools\telegram-ipv4-proxy.py` | proxy IPv4 (port 8899) — กัน IPv6 route พังของ ISP |
 | `shared\tools\watchdog_notify.py` | แจ้ง Telegram เมื่อ gateway ถูก restart |
@@ -93,8 +92,7 @@ Watcher/Tasks (Task Scheduler):
 |---|---|---|
 | `AI_Factory_Gateway` | at logon + loop | รัน gateway (watchdog) |
 | `HermesGatewayWatch` | ทุก 2 นาที | ฆ่า gateway ค้าง + proxy self-heal |
-| `HermesFallbackWatch` | ทุก 1 นาที | แจ้งเตือน fallback activated |
-| `HermesHealthCheck` | ทุก 30 นาที | รายงานสุขภาพ → Telegram (มีปัญหาเท่านั้น) |
+| `HermesFallbackWatch` | ทุก 1 นาที | แจ้งเตือน fallback activated + แนบ Health Check ย่อ (v12.1 — แทน HermesHealthCheck เดิม) |
 
 ---
 
@@ -118,7 +116,8 @@ Watcher/Tasks (Task Scheduler):
 ```powershell
 hermes fallback list                                        # chain ปัจจุบัน (12 ชั้น API)
 python C:\AI_FACTORY\shared\tools\model-health-check.py    # โมเดล orchestration 8 ตัว
-powershell -File C:\AI_FACTORY\shared\hermes_home\health-check.ps1 -NotifyTelegram   # สุขภาพเต็ม + ส่งผล
+powershell -File C:\AI_FACTORY\shared\hermes_home\health-check.ps1              # สุขภาพเต็ม (รันเองได้ทุกเมื่อ)
+powershell -File C:\AI_FACTORY\shared\hermes_home\health-check.ps1 -Compact      # เฉพาะ CRIT/WARN (fallback-watch แนบให้อัตโนมัติ)
 Get-Content C:\AI_FACTORY\shared\hermes_home\logs\agent.log -Tail 50 | Select-String "turn:|API call #1:|Fallback activated"
 netstat -ano | findstr ":8899"                              # proxy Telegram
 ```

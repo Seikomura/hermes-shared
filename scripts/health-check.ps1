@@ -8,10 +8,12 @@
     2. Process        — มี hermes.exe / python.exe (gateway) รันอยู่ไหม
     3. Gateway log    — log มีกิจกรรมล่าสุดไหม + เชื่อมต่อ Telegram หรือยัง
     4. Fallback chain — หลัก + fallback ครบไหม (openrouter → nous → gemini — API เท่านั้น)
-    5. Tailscale      — VPN เชื่อมต่อไหม (เหลือไว้ตรวจเฉยๆ — ระบบไม่พึ่งเครื่องทำงานอีกแล้ว)
-    6. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
-    7. .env keys      — มี GEMINI_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
-    8. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
+    5. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
+    6. .env keys      — มี GEMINI_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
+    7. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
+
+  ตัวเลือก -Compact: พิมพ์เฉพาะรายการ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบกับ
+  fallback alert (fallback-watch.ps1) ตอนเปลี่ยนโมเดล — ไม่พิมพ์ header/ตาราง
 
   อ่านเอกสาร workthrough.md สำหรับวิธีแก้ไขเมื่อเจอปัญหา
 
@@ -32,6 +34,7 @@ param(
     [int]$ErrorWindowMin      = 15,      # ดู error ย้อนหลังกี่นาที
     [switch]$NotifyTelegram,             # ส่งผลไป Telegram เมื่อมีปัญหา (CRIT/WARN)
     [switch]$AlwaysReport,               # ส่งผลไป Telegram แม้ปกติ (ใช้ทดสอบ)
+    [switch]$Compact,                    # พิมพ์เฉพาะ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบ fallback alert
     [string]$TelegramTarget = 'telegram:1709297704'   # ปลายทาง (bot:chat_id)
 )
 
@@ -182,21 +185,7 @@ if ($fb) {
     Add-Check 'Fallback chain' 'CRIT' "ไม่พบ hermes.exe ที่ $HERMES"
 } else {
     Add-Check 'Fallback chain' 'WARN' 'hermes fallback list ไม่ตอบภายใน 20 วิ (hermes อาจค้าง)'
-}# ══════════════════════ 5) TAILSCALE ══════════════════════
-# ระบบเป็น API-only แล้ว (v12) — ไม่ต้องพึ่งเครื่องทำงาน/LM Studio; เช็คไว้เฉยๆ เป็น INFO
-$tsExe = 'C:\Program Files\Tailscale\tailscale.exe'
-if (Test-Path $tsExe) {
-    $tsIp = (& $tsExe ip -4 2>&1 | Select-Object -First 1)
-    if ($tsIp -match '^100\.') {
-        Add-Check 'Tailscale' 'INFO' "เชื่อมต่อ (IP: $tsIp) — ไม่ได้ใช้กับ chain อีกแล้ว (API-only)"
-    } else {
-        Add-Check 'Tailscale' 'INFO' "tailscale ไม่ตอบ IP: $tsIp — ไม่กระทบ (API-only)"
-    }
-} else {
-    Add-Check 'Tailscale' 'INFO' 'ไม่พบ tailscale.exe — ไม่กระทบ (API-only)'
-}
-
-# ══════════════════════ 6) TASK SCHEDULER ══════════════════════
+}# ══════════════════════ 5) TASK SCHEDULER ══════════════════════
 # รองรับทั้ง task HermesGateway (เครื่องทำงาน) และ AI_Factory_Gateway (เครื่องบ้าน)
 $taskOut = (schtasks /query /TN HermesGateway /V /FO LIST 2>&1 | Out-String)
 if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
@@ -216,7 +205,7 @@ if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
     }
 }
 
-# ══════════════════════ 7) .env KEYS (ชื่อเท่านั้น!) ══════════════════════
+# ══════════════════════ 6) .env KEYS (ชื่อเท่านั้น!) ══════════════════════
 $envFile = Join-Path $HERMES_HOME '.env'
 if (Test-Path $envFile) {
     $envTxt = Get-Content $envFile -Raw
@@ -231,7 +220,7 @@ if (Test-Path $envFile) {
     Add-Check '.env' 'CRIT' "ไม่พบไฟล์ .env ที่ $HERMES_HOME"
 }
 
-# ══════════════════════ 8) ERRORS ล่าสุด ══════════════════════
+# ══════════════════════ 7) ERRORS ล่าสุด ══════════════════════
 $errLog = Join-Path $HERMES_HOME 'logs\errors.log'
 if (Test-Path $errLog) {
     $recentErrs = @()
@@ -254,42 +243,7 @@ if (Test-Path $errLog) {
     Add-Check 'Errors' 'INFO' 'ไม่พบ logs\errors.log'
 }
 
-# ══════════════════════ 10) PYTHON DEPS (venv) ══════════════════════
-# ตรวจว่า venv ของ Hermes import ครบไหม — กันเหตุการณ์ pydantic หายแล้ว bot เงียบ
-# (heartbeat ยังสด แต่ทุกข้อความล้มตอน init agent — เจอจริง 14 ส.ค. 69: bot รัน pip install
-#  แล้วโดนตัดกลางคัน -> pydantic หาย -> openai import ไม่ได้)
-$VENV_PY = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe'
-if (Test-Path $VENV_PY) {
-    $depJob = Start-Job -ScriptBlock {
-        param($py)
-        & $py -c "import pydantic, pydantic.fields; from openai import OpenAI; print('OK', pydantic.VERSION)" 2>&1 | Out-String
-    } -ArgumentList $VENV_PY
-    $depOut = ''
-    if (Wait-Job $depJob -Timeout 25) {
-        $depOut = (Receive-Job $depJob)
-    } else {
-        Stop-Job $depJob -ErrorAction SilentlyContinue
-    }
-    Remove-Job $depJob -Force -ErrorAction SilentlyContinue
-    if ($depOut -match 'OK') {
-        $ver = if ($depOut -match 'OK (\d+\.\d+)') { $Matches[1] } else { '?' }
-        Add-Check 'Python deps' 'OK' ("venv import ครบ (pydantic {0}, openai OK)" -f $ver)
-    } else {
-        $hint = 'ซ่อม: uv pip install --python "' + $VENV_PY + '" "pydantic==2.13.4" แล้ว restart gateway'
-        Add-Check 'Python deps' 'CRIT' "venv พัง (pydantic/openai import ไม่ได้) — $hint"
-    }
-} else {
-    Add-Check 'Python deps' 'INFO' 'ไม่พบ venv python.exe'
-}
-
 # ══════════════════════ REPORT ══════════════════════
-Write-Host ""
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  🧪 HEALTH CHECK — Hermes Gateway System" -ForegroundColor Cyan
-Write-Host ("  " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cyan
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host ""
-
 $nCrit = 0; $nWarn = 0
 $reportLines = New-Object System.Collections.Generic.List[string]
 foreach ($r in $script:results) {
@@ -299,7 +253,30 @@ foreach ($r in $script:results) {
     $color = Get-Color $r.Status
     $line  = "{0} {1,-22} : {2}" -f $icon, $r.Name, $r.Detail
     $reportLines.Add($line)
-    Write-Host $line -ForegroundColor $color
+}
+
+# โหมด Compact: พิมพ์เฉพาะ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบกับ fallback alert
+# ไม่พิมพ์ header/ตาราง/สรุป เพื่อให้ fallback-watch.ps1 เอาไปแปะในข้อความได้ตรงๆ
+if ($Compact) {
+    foreach ($r in $script:results) {
+        if ($r.Status -eq 'CRIT' -or $r.Status -eq 'WARN') {
+            $icon = Get-Icon $r.Status
+            Write-Output "$icon $($r.Name): $($r.Detail)"
+        }
+    }
+    # exit code ยังเหมือนเดิม (0 = OK / 2 = WARN / 1 = CRIT) — ให้ fallback-watch ใช้ตัดสินใจ
+    if ($nCrit -gt 0) { exit 1 } elseif ($nWarn -gt 0) { exit 2 } else { exit 0 }
+}
+
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  🧪 HEALTH CHECK — Hermes Gateway System" -ForegroundColor Cyan
+Write-Host ("  " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cyan
+Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($line in $reportLines) {
+    Write-Host $line -ForegroundColor (Get-Color (($script:results | Where-Object { $_.Name -eq ($line -replace '^.{1} (.*?) :.*', '$1').Trim() } | Select-Object -First 1).Status))
 }
 
 Write-Host ""

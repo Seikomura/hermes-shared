@@ -191,6 +191,28 @@ $chainLines.Add("(แจ้งครั้งเดียวต่อ $CooldownM
 
 $body = $chainLines -join "`n"
 
+# ── 4.5) แนบ Health Check ย่อ (เฉพาะ CRIT/WARN) — ระบบเปลี่ยนโมเดล = อยากรู้สถานะรวมด้วย ──
+# เรียก health-check.ps1 -Compact (read-only — ไม่แตะ gateway) แล้วเอาเฉพาะบรรทัด CRIT/WARN แนบท้าย
+# ถ้าทุกอย่าง OK จะไม่แนบ (กันข้อความรก) — timeout 45 วิ กัน hermes ค้างแล้ว alert ค้างตาม
+$hcScript = Join-Path $HERMES_HOME 'health-check.ps1'
+if (Test-Path $hcScript) {
+    $hcOut = ''
+    $hcJob = Start-Job -ScriptBlock {
+        param($script)
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Compact 2>&1
+    } -ArgumentList $hcScript
+    if (Wait-Job $hcJob -Timeout 45) {
+        $hcOut = (Receive-Job $hcJob | Out-String).Trim()
+    } else {
+        Stop-Job $hcJob -ErrorAction SilentlyContinue
+    }
+    Remove-Job $hcJob -Force -ErrorAction SilentlyContinue
+
+    if ($hcOut) {
+        $body += "`n`n🧪 สถานะระบบ (Health Check):`n" + ($hcOut -split "`r?`n" | ForEach-Object { "  $_" }) -join "`n"
+    }
+}
+
 # ── 5) ส่งแจ้งเตือนผ่าน Telegram Bot API (JSON UTF-8) ─────────────
 $sent = $false
 $token = ''

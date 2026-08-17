@@ -852,6 +852,14 @@ response ready:    platform=telegram chat=1709297704 time=116.5s api_calls=1 res
 - **docs:** Workthrough (chain 12 ชั้น + §10 วิธีเช็ค + troubleshooting) · SYSTEM-OVERVIEW · FALLBACK-AI-SETUP · Quick-Start · README — ลบ reference LM Studio/Tailscale ทั้งหมด; ตัวอย่าง E2E เก่า (ชุด 1-4) ที่อ้างชั้น ⑬⑭ เก็บไว้เป็นประวัติ
 - **ประวัติ (เก็บไว้):** v9 (ทดสอบ lmstudio — เลือกชั้นถูกแต่ CPU-only ช้าเกินจริง), v10 (alert ตกถึง lmstudio), v8 (idle-based unload/load) — อ่านเพื่อเรียนรู้ว่าทำไมถึงถอดออก
 
+### v12.1 — 17 ส.ค. 2026 (ยุบ Health Check เข้า Fallback Watch + ลบ Tailscale check)
+
+- **ลบ Tailscale ออกจาก health-check:** ระบบ API-only แล้ว — ตัด `Tailscale` section ออกจาก `health-check.ps1` (เหลือตรวจ 7 จุด: heartbeat/process/log+Telegram/chain/task/.env keys/errors)
+- **Health Check แจ้งเฉพาะตอนเปลี่ยนโมเดล (ยุบรวม):** เอา task `HermesHealthCheck` (ทุก 30 นาที) ออก — `fallback-watch.ps1` (ทุก 1 นาที) เมื่อเจอ `Fallback activated` จะเรียก `health-check.ps1 -Compact` (เพิ่ม switch ใหม่: print เฉพาะ CRIT/WARN) แล้ว**แนบสถานะระบบไปในข้อความแจ้งเตือนเดียวกัน** — ระบบปกติ (ไม่มี fallback) จะเงียบสนิท ไม่มี health report ทุก 30 นาทีอีก
+- **Gateway self-heal ยังทำงานเต็มรูปแบบ (ไม่ลด):** health-check/fallback-watch เป็น **read-only** (ไม่แตะ gateway) — watcher (`gateway-watch`) + bat loop ยังคอย restart กัน bot เงียบตามเดิม; การยุบ Health Check แค่ลดการแจ้งเตือน ไม่แตะกลไกกู้คืน
+- **ไฟล์ที่ลบ:** `install-healthcheck-task.ps1` + task `HermesHealthCheck` (ลบจริง); `install-tasks.ps1` ตัด block health-check ออก
+- **ทดสอบจริง:** `health-check.ps1 -Compact` → แสดงเฉพาะ WARN/CRIT ✅ / `fallback-watch.ps1 -TestSend` → ส่งพร้อม 🧪 สถานะระบบแนบ ✅ (ข้อความทดสอบใน Telegram)
+
 ### v11 — 16 ส.ค. 2026 (แก้ watcher restart วน — กัน 2 กลไกกู้คืนชนกัน)
 
 - **อาการ (เจอระหว่าง E2E 22:31–23:09):** watcher (`HermesGatewayWatch`) restart gateway **วนทุก 2 นาทีไม่หยุด** — bot ตอบได้แต่ถูกฆ่ากลางทางตลอด; `gateway-watch.log` เต็มไปด้วย `WATCH: heartbeat เก่า ... -> restart`

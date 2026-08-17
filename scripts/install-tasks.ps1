@@ -1,11 +1,11 @@
-﻿# install-tasks.ps1 — ลง Task Scheduler ชุดเดียวกับเครื่องทำงาน (watchdog + health-check + fallback)
+﻿# install-tasks.ps1 — ลง Task Scheduler ชุดเดียวกับเครื่องทำงาน (watchdog + fallback)
 # ============================================================
 # ใช้ได้ทั้งเครื่องทำงานและเครื่องบ้าน (idempotent — ข้ามตัวที่มีอยู่แล้ว ไม่ลงซ้ำ)
 # - HermesGatewayWatch    : restart gateway ถ้า heartbeat ค้าง (ทุก 2 นาที)
 # - HermesGatewayLogonKick: restart gateway ทันทีที่ login (ถ้าตายค้างจากคืนก่อน)
-# - HermesHealthCheck     : ตรวจสุขภาพทุก 30 นาที -> แจ้ง Telegram (เฉพาะมีปัญหา)
-# - HermesFallbackWatch   : แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น (ทุก 1 นาที)
+# - HermesFallbackWatch   : แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น (ทุก 1 นาที) + แนบ Health Check ย่อ
 # (v12: ลบ LMStudioWatch ออกแล้ว — ระบบเป็น API-only ไม่ใช้ LM Studio อีก)
+# (v12.1: ลบ HermesHealthCheck ออกแล้ว — สถานะระบบแจ้งตอน fallback activated ผ่าน fallback-watch แทน)
 #
 # รันเองได้ หรือ sync.ps1 -Scripts จะเรียกให้อัตโนมัติ
 #   powershell -ExecutionPolicy Bypass -File install-tasks.ps1 -HERMES_HOME 'C:\AI Factory'
@@ -66,17 +66,7 @@ Ensure-Task 'HermesGatewayLogonKick' {
         -Description 'restart gateway ทันทีที่ login ถ้ายังตายค้าง' -Force | Out-Null
 } 'gateway kick ตอน login'
 
-# 3) HermesHealthCheck — ทุก 30 นาที (แจ้ง Telegram เฉพาะมีปัญหา)
-Ensure-Task 'HermesHealthCheck' {
-    $a = New-WatchAction 'health-check.ps1' ' -NotifyTelegram'
-    $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-        -RepetitionInterval (New-TimeSpan -Minutes 30)
-    Register-ScheduledTask -TaskName 'HermesHealthCheck' -Action $a -Trigger $t `
-        -Settings (New-WatchSettings 10) `
-        -Description 'Hermes health check ทุก 30 นาที — แจ้ง Telegram เมื่อพบปัญหา' -Force | Out-Null
-} 'health-check ทุก 30 นาที'
-
-# 4) HermesFallbackWatch — ทุก 1 นาที (แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น)
+# 3) HermesFallbackWatch — ทุก 1 นาที (แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น + แนบ Health Check ย่อ)
 Ensure-Task 'HermesFallbackWatch' {
     $a = New-WatchAction 'fallback-watch.ps1'
     $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
@@ -84,7 +74,7 @@ Ensure-Task 'HermesFallbackWatch' {
         -RepetitionDuration (New-TimeSpan -Days 3650)
     Register-ScheduledTask -TaskName 'HermesFallbackWatch' -Action $a -Trigger $t `
         -Settings (New-WatchSettings 5) `
-        -Description 'ตรวจ fallback ทุกชั้น แล้วแจ้งเตือน Telegram' -Force | Out-Null
+        -Description 'ตรวจ fallback ทุกชั้น แล้วแจ้งเตือน Telegram (แนบ Health Check ย่อ)' -Force | Out-Null
 } 'fallback-watch ทุก 1 นาที'
 
 # 5) เช็ค task หลัก HermesGateway (gateway-watch.ps1 ใช้ restart ผ่าน task นี้)

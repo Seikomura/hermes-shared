@@ -54,6 +54,8 @@
 | ทดสอบคุยตรงผ่าน Nous ฟรี | `hermes chat -q "ตอบว่า OK" -Q --provider nous -m upstage/solar-pro4:free --max-turns 2` |
 | ทดสอบคุยตรงผ่าน Gemini | `hermes chat -q "ตอบว่า OK" -Q --provider gemini -m gemini-3.6-flash --max-turns 2` |
 | โมเดลฟรีทั้งหมดของ Nous | `curl -s https://inference-api.nousresearch.com/v1/models` (ดูตัวที่ pricing = 0) |
+| Health Check เต็ม (รันเองได้ทุกเมื่อ) | `powershell -File C:\AI_FACTORY\shared\hermes_home\health-check.ps1` — exit 0/1/2; เพิ่ม `-Compact` = เฉพาะ CRIT/WARN |
+| ดูว่า fallback alert แนบ Health Check ไหม | `powershell -File C:\AI_FACTORY\shared\hermes_home\fallback-watch.ps1 -TestSend` — ส่งข้อความทดสอบพร้อม 🧪 สถานะระบบ (v12.1) |
 
 > 💡 คำสั่ง `hermes ...` ต้องตั้งค่า `$hermes` ก่อน (ดู Workthrough §5.2):
 > ```powershell
