@@ -185,7 +185,9 @@ if ($fb) {
     Add-Check 'Fallback chain' 'CRIT' "ไม่พบ hermes.exe ที่ $HERMES"
 } else {
     Add-Check 'Fallback chain' 'WARN' 'hermes fallback list ไม่ตอบภายใน 20 วิ (hermes อาจค้าง)'
-}# ══════════════════════ 5) TASK SCHEDULER ══════════════════════
+}
+
+# ══════════════════════ 5) TASK SCHEDULER ══════════════════════
 # รองรับทั้ง task HermesGateway (เครื่องทำงาน) และ AI_Factory_Gateway (เครื่องบ้าน)
 $taskOut = (schtasks /query /TN HermesGateway /V /FO LIST 2>&1 | Out-String)
 if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
@@ -245,14 +247,14 @@ if (Test-Path $errLog) {
 
 # ══════════════════════ REPORT ══════════════════════
 $nCrit = 0; $nWarn = 0
-$reportLines = New-Object System.Collections.Generic.List[string]
+$reportLines = New-Object System.Collections.Generic.List[object]   # @{ Line; Color }
 foreach ($r in $script:results) {
     if ($r.Status -eq 'CRIT') { $nCrit++ }
     if ($r.Status -eq 'WARN') { $nWarn++ }
     $icon  = Get-Icon $r.Status
     $color = Get-Color $r.Status
     $line  = "{0} {1,-22} : {2}" -f $icon, $r.Name, $r.Detail
-    $reportLines.Add($line)
+    $reportLines.Add([pscustomobject]@{ Line = $line; Color = $color })
 }
 
 # โหมด Compact: พิมพ์เฉพาะ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบกับ fallback alert
@@ -275,8 +277,8 @@ Write-Host ("  " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cy
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
-foreach ($line in $reportLines) {
-    Write-Host $line -ForegroundColor (Get-Color (($script:results | Where-Object { $_.Name -eq ($line -replace '^.{1} (.*?) :.*', '$1').Trim() } | Select-Object -First 1).Status))
+foreach ($entry in $reportLines) {
+    Write-Host $entry.Line -ForegroundColor $entry.Color
 }
 
 Write-Host ""
