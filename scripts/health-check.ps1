@@ -281,6 +281,34 @@ if (Test-Path $errLog) {
     Add-Check 'Errors' 'INFO' 'ไม่พบ logs\errors.log'
 }
 
+# ══════════════════════ 10) PYTHON DEPS (venv) ══════════════════════
+# ตรวจว่า venv ของ Hermes import ครบไหม — กันเหตุการณ์ pydantic หายแล้ว bot เงียบ
+# (heartbeat ยังสด แต่ทุกข้อความล้มตอน init agent — เจอจริง 14 ส.ค. 69: bot รัน pip install
+#  แล้วโดนตัดกลางคัน -> pydantic หาย -> openai import ไม่ได้)
+$VENV_PY = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe'
+if (Test-Path $VENV_PY) {
+    $depJob = Start-Job -ScriptBlock {
+        param($py)
+        & $py -c "import pydantic, pydantic.fields; from openai import OpenAI; print('OK', pydantic.VERSION)" 2>&1 | Out-String
+    } -ArgumentList $VENV_PY
+    $depOut = ''
+    if (Wait-Job $depJob -Timeout 25) {
+        $depOut = (Receive-Job $depJob)
+    } else {
+        Stop-Job $depJob -ErrorAction SilentlyContinue
+    }
+    Remove-Job $depJob -Force -ErrorAction SilentlyContinue
+    if ($depOut -match 'OK') {
+        $ver = if ($depOut -match 'OK (\d+\.\d+)') { $Matches[1] } else { '?' }
+        Add-Check 'Python deps' 'OK' ("venv import ครบ (pydantic {0}, openai OK)" -f $ver)
+    } else {
+        $hint = 'ซ่อม: uv pip install --python "' + $VENV_PY + '" "pydantic==2.13.4" แล้ว restart gateway'
+        Add-Check 'Python deps' 'CRIT' "venv พัง (pydantic/openai import ไม่ได้) — $hint"
+    }
+} else {
+    Add-Check 'Python deps' 'INFO' 'ไม่พบ venv python.exe'
+}
+
 # ══════════════════════ REPORT ══════════════════════
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
