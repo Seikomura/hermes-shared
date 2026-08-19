@@ -1,6 +1,6 @@
 # AI FACTORY — คู่มือการใช้งาน (Workthrough)
 
-> อัปเดตล่าสุด: 16 สิงหาคม 2026 (v11 — แก้ watcher restart วน: กัน 2 กลไกกู้คืนชนกัน + retry อ่าน heartbeat; docs ตรงกับ config.yaml)
+> อัปเดตล่าสุด: 19 สิงหาคม 2026 (v13 — แก้ bat loop guard: lifecycle.json fast path + ลบ proxy ซ้อน; ระบบนิ่ง)
 > เอกสารนี้อธิบายภาพรวม สถาปัตยกรรม และวิธีใช้งานโปรเจกต์ AI FACTORY ทั้งหมด ตั้งแต่วิธีติดตั้ง เริ่มระบบ ไปจนถึงการสร้าง Product ผ่าน CLI และ Telegram Bot
 
 ---
@@ -840,6 +840,14 @@ response ready:    platform=telegram chat=1709297704 time=116.5s api_calls=1 res
 ---
 
 ## 14. Changelog
+
+### v13 — 19 ส.ค. 2026 (แก้ bat loop guard — gateway ค้างหลัง plugin discovery + proxy ซ้อน 6 ตัว)
+
+- **อาการ:** bot ไม่ทำงาน — gateway ค้างหลัง plugin discovery (ไม่มี log ใหม่ 10+ นาที) + proxy 8899 มี 6 ตัวซ้อนกัน + bat loop watchdog restart วน 6 ครั้ง → gave up (exit 1) → ไม่มี self-heal
+- **ต้นตอ ① Gateway ค้างหลัง boot:** gateway boot ช้าบนเครื่อง RAM ต่ำ (plugin discovery + SQLite init) → เขียน heartbeat ครั้งแรกไม่ทัน → bat loop guard (`check-gateway-running.ps1`) ใช้ CIM query ช้า (5-10s) → timeout → ไม่เห็น gateway → start ซ้ำ → Telegram ชนกัน → exit code 1
+- **ต้นตอ ② Proxy ซ้อน 6 ตัว:** bat loop `ensure_proxy` เช็ค port 8899 ว่ามีคนฟัง → มีแล้ว → แต่ proxy จริง die ระหว่างนั้น → bat loop start ใหม่ทุก loop → 6 ตัวซ้อน (SO_REUSEADDR) → proxy จริงถูก replace ด้วยตัวที่ไม่ทำงาน
+- **แก้:** (1) **`check-gateway-running.ps1` v2** — อ่าน `lifecycle.json` ก่อน (<1ms) แทน CIM query (5-10s); fallback CIM ถ้า file หาย/stale → guard เร็วขึ้น 10x (0.5s vs 5s) → ไม่พลาด detect gateway ที่กำลัง boot (2) ฆ่า proxy 6 ตัว → เหลือ 1 ตัว (clean start) (3) kill gateway ค้าง + restart ผ่าน Task Scheduler → Telegram connected สำเร็จ
+- **บทเรียน:** ⚠️ CIM query (`Get-CimInstance Win32_Process`) ช้ามากบนเครื่อง RAM ต่ำ (<1GB free) — ใช้ file-based check (lifecycle.json) เร็วกว่า 10x; และ**อย่าเช็ค port ว่ามีคนฟังแล้วเชื่อว่า proxy ทำงาน** — ต้อง probe จริง (TCP connect + read) ไม่งั้นจะเจอ zombie process
 
 ### v12 — 17 ส.ค. 2026 (ลบ LM Studio ออกจาก fallback chain — เหลือ API เท่านั้น)
 
