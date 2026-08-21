@@ -7,13 +7,11 @@
     1. Heartbeat      — gateway ยัง alive ไหม (updated_at สดหรือเก่า)
     2. Process        — มี hermes.exe / python.exe (gateway) รันอยู่ไหม
     3. Gateway log    — log มีกิจกรรมล่าสุดไหม + เชื่อมต่อ Telegram หรือยัง
-    4. Fallback chain — หลัก + fallback ครบไหม (openrouter → nous → gemini — API เท่านั้น)
-    5. Task Scheduler — HermesGateway / AI_Factory_Gateway เปิด auto-start ไหม
-    6. .env keys      — มี GEMINI_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
+    4. Fallback chain — หลัก + fallback ครบไหม (nemotron → gemini → gemma → nous)
+    5. Task Scheduler — HermesGateway เปิด auto-start (AtStartup) ไหม
+    6. .env keys      — มี GOOGLE_API_KEY / OPENROUTER_API_KEY / TELEGRAM_BOT_TOKEN ไหม (ไม่แสดงค่า)
     7. Errors ล่าสุด  — มี error ใหม่ๆ ใน errors.log ไหม
-
-  ตัวเลือก -Compact: พิมพ์เฉพาะรายการ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบกับ
-  fallback alert (fallback-watch.ps1) ตอนเปลี่ยนโมเดล — ไม่พิมพ์ header/ตาราง
+    8. Python deps    — venv import pydantic/openai ได้ไหม (กัน bot ทำร้ายตัวเอง)
 
   อ่านเอกสาร workthrough.md สำหรับวิธีแก้ไขเมื่อเจอปัญหา
 
@@ -34,26 +32,15 @@ param(
     [int]$ErrorWindowMin      = 15,      # ดู error ย้อนหลังกี่นาที
     [switch]$NotifyTelegram,             # ส่งผลไป Telegram เมื่อมีปัญหา (CRIT/WARN)
     [switch]$AlwaysReport,               # ส่งผลไป Telegram แม้ปกติ (ใช้ทดสอบ)
-    [switch]$Compact,                    # พิมพ์เฉพาะ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบ fallback alert
     [string]$TelegramTarget = 'telegram:1709297704'   # ปลายทาง (bot:chat_id)
 )
 
 $ErrorActionPreference = 'Continue'
 $script:startTime = Get-Date
 
-# ── ค่าคงที่ของระบบ (auto-detect — env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
-if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
-elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
-elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
-else                                                     { $HERMES_HOME = 'C:\AI Factory' }
-
-$HERMES = $null
-foreach ($c in @(
-    "$env:LOCALAPPDATA\hermes\hermes-agent\venv\Scripts\hermes.exe",
-    "$env:USERPROFILE\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe"
-)) { if ($c -and (Test-Path $c)) { $HERMES = $c; break } }
-if (-not $HERMES) { $HERMES = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe' }
-
+# ── ค่าคงที่ของระบบ (แก้ได้ถ้าย้ายเครื่อง) ──────────────────────────
+$HERMES_HOME = 'C:\AI Factory'
+$HERMES      = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe'
 $env:HERMES_HOME = $HERMES_HOME
 
 # ── ตัวเก็บผลลัพธ์ ─────────────────────────────────────────────────
@@ -115,22 +102,6 @@ if ($gwProcs.Count -gt 0) {
     Add-Check 'Process' 'CRIT' 'ไม่พบ hermes/python gateway process — gateway ไม่รัน!'
 }
 
-# ══════════════════════ 2.5) TELEGRAM IPv4 PROXY ══════════════════════
-# proxy (telegram-ipv4-proxy.py, port 8899) ตาย = Telegram ต่อไม่ได้ทั้งที่ gateway ยังปกติ
-# -> ต้องเช็คทุกครั้ง (ถ้าตาย HealthCheck จะแจ้งเตือน + ระบบอื่น (gateway-watch) จะ start กลับเอง)
-$proxyOk = $false
-try {
-    $pc = New-Object Net.Sockets.TcpClient
-    $pc.Connect('127.0.0.1', 8899)
-    $pc.Close()
-    $proxyOk = $true
-} catch { }
-if ($proxyOk) {
-    Add-Check 'Telegram proxy' 'OK' 'port 8899 ฟังอยู่ (telegram-ipv4-proxy.py ทำงาน)'
-} else {
-    Add-Check 'Telegram proxy' 'CRIT' 'port 8899 ตาย! proxy (telegram-ipv4-proxy.py) ไม่รัน — Telegram จะต่อไม่ได้; gateway-watch จะ start กลับเองภายใน 2 นาที'
-}
-
 # ══════════════════════ 3) GATEWAY LOG ══════════════════════
 $gwLog = Join-Path $HERMES_HOME 'logs\gateway.log'
 if (Test-Path $gwLog) {
@@ -168,16 +139,18 @@ if (Test-Path $HERMES) {
     Remove-Job $fbJob -Force -ErrorAction SilentlyContinue
 }
 if ($fb) {
-    $okGemini     = $fb -match 'gemini'
-    $okNous       = $fb -match 'solar-pro4'
-    $okOpenRouter = $fb -match 'nemotron'
-    if ($okGemini -and $okNous -and $okOpenRouter) {
-        Add-Check 'Fallback chain' 'OK' 'หลัก openrouter (nemotron) + fallback ครบ (nous → gemini)'
+    $okNemotron = $fb -match 'nemotron'
+    $okGemini   = $fb -match 'gemini'
+    $okGemma    = $fb -match 'gemma'
+    $okNous     = $fb -match 'solar-pro4'
+    if ($okNemotron -and $okGemini -and $okGemma -and $okNous) {
+        Add-Check 'Fallback chain' 'OK' 'หลัก nemotron + fallback ครบ 3 ชั้น (gemini → gemma → nous)'
     } else {
         $missing = @()
-        if (-not $okOpenRouter) { $missing += 'openrouter (nemotron)' }
-        if (-not $okNous)       { $missing += 'nous (solar-pro4)' }
-        if (-not $okGemini)     { $missing += 'gemini' }
+        if (-not $okNemotron) { $missing += 'nemotron (หลัก)' }
+        if (-not $okGemini)   { $missing += 'gemini' }
+        if (-not $okGemma)    { $missing += 'gemma' }
+        if (-not $okNous)     { $missing += 'nous (solar-pro4)' }
         Add-Check 'Fallback chain' 'WARN' ("ไม่ครบ/ผิดปกติ: ขาด {0}" -f ($missing -join ', '))
         Add-Check 'Fallback chain' 'INFO' 'รัน "hermes fallback list" เพื่อดูรายละเอียด'
     }
@@ -188,22 +161,16 @@ if ($fb) {
 }
 
 # ══════════════════════ 5) TASK SCHEDULER ══════════════════════
-# รองรับทั้ง task HermesGateway (เครื่องทำงาน) และ AI_Factory_Gateway (เครื่องบ้าน)
 $taskOut = (schtasks /query /TN HermesGateway /V /FO LIST 2>&1 | Out-String)
 if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
-    $taskOut2 = (schtasks /query /TN AI_Factory_Gateway /V /FO LIST 2>&1 | Out-String)
-    if ($taskOut2 -match 'is not currently running|ERROR|ไม่พบ') {
-        Add-Check 'Auto-start task' 'CRIT' 'ไม่พบ task HermesGateway / AI_Factory_Gateway — จะไม่ start ตอนเปิดเครื่อง!'
-    } else {
-        Add-Check 'Auto-start task' 'OK' 'AI_Factory_Gateway (เครื่องบ้าน) มีอยู่ — gateway จะ start ตอน login'
-    }
+    Add-Check 'Auto-start task' 'CRIT' 'ไม่พบ task HermesGateway — จะไม่ start ตอนเปิดเครื่อง!'
 } else {
-    $atStartup = $taskOut -match 'At system start up|At log on'
+    $atStartup = $taskOut -match 'At system start up'
     $status    = if ($taskOut -match 'Status:\s+(\w+)') { $Matches[1] } else { '?' }
     if ($atStartup) {
-        Add-Check 'Auto-start task' 'OK' "HermesGateway — trigger เปิดเครื่อง/login + สถานะ $status"
+        Add-Check 'Auto-start task' 'OK' "AtStartup + สถานะ $status"
     } else {
-        Add-Check 'Auto-start task' 'WARN' "HermesGateway trigger ผิดปกติ (ตอนนี้: สถานะ $status)"
+        Add-Check 'Auto-start task' 'WARN' "trigger ไม่ใช่ AtStartup (ตอนนี้: สถานะ $status)"
     }
 }
 
@@ -211,13 +178,13 @@ if ($taskOut -match 'is not currently running|ERROR|ไม่พบ') {
 $envFile = Join-Path $HERMES_HOME '.env'
 if (Test-Path $envFile) {
     $envTxt = Get-Content $envFile -Raw
-    # Gemini key: ยอมรับทั้ง GEMINI_API_KEY (เครื่องบ้าน) และ GOOGLE_API_KEY (เครื่องทำงาน)
-    $gKey = if ($envTxt -match '(?m)^\s*(?:GEMINI|GOOGLE)_API_KEY\s*=\s*\S') { 'OK' } else { 'CRIT' }
-    $oKey = if ($envTxt -match '(?m)^\s*OPENROUTER_API_KEY\s*=\s*\S') { 'OK' } else { 'CRIT' }
-    $tKey = if ($envTxt -match '(?m)^\s*TELEGRAM_BOT_TOKEN\s*=\s*\S') { 'OK' } else { 'CRIT' }
-    Add-Check '.env: Gemini key' $gKey $(if ($gKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — GEMINI_API_KEY หรือ GOOGLE_API_KEY (ดู README.md ส่วน .env)' })
-    Add-Check '.env: OpenRouter' $oKey $(if ($oKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — ดู README.md ส่วน .env' })
-    Add-Check '.env: Telegram' $tKey $(if ($tKey -eq 'OK') { 'ตั้งค่าแล้ว (ซ่อนค่า)' } else { 'ยังไม่ตั้งค่า — ดู README.md ส่วน .env' })
+    foreach ($k in @('GOOGLE_API_KEY', 'OPENROUTER_API_KEY', 'TELEGRAM_BOT_TOKEN')) {
+        if ($envTxt -match "(?m)^\s*$k\s*=\s*\S") {
+            Add-Check ".env: $k" 'OK' 'ตั้งค่าแล้ว (ซ่อนค่า)'
+        } else {
+            Add-Check ".env: $k" 'CRIT' "ยังไม่ตั้งค่า — ดู README.md ส่วน .env"
+        }
+    }
 } else {
     Add-Check '.env' 'CRIT' "ไม่พบไฟล์ .env ที่ $HERMES_HOME"
 }
@@ -245,31 +212,35 @@ if (Test-Path $errLog) {
     Add-Check 'Errors' 'INFO' 'ไม่พบ logs\errors.log'
 }
 
-# ══════════════════════ REPORT ══════════════════════
-$nCrit = 0; $nWarn = 0
-$reportLines = New-Object System.Collections.Generic.List[object]   # @{ Line; Color }
-foreach ($r in $script:results) {
-    if ($r.Status -eq 'CRIT') { $nCrit++ }
-    if ($r.Status -eq 'WARN') { $nWarn++ }
-    $icon  = Get-Icon $r.Status
-    $color = Get-Color $r.Status
-    $line  = "{0} {1,-22} : {2}" -f $icon, $r.Name, $r.Detail
-    $reportLines.Add([pscustomobject]@{ Line = $line; Color = $color })
-}
-
-# โหมด Compact: พิมพ์เฉพาะ CRIT/WARN (บรรทัดเดียวต่อรายการ) — ใช้แนบกับ fallback alert
-# ไม่พิมพ์ header/ตาราง/สรุป เพื่อให้ fallback-watch.ps1 เอาไปแปะในข้อความได้ตรงๆ
-if ($Compact) {
-    foreach ($r in $script:results) {
-        if ($r.Status -eq 'CRIT' -or $r.Status -eq 'WARN') {
-            $icon = Get-Icon $r.Status
-            Write-Output "$icon $($r.Name): $($r.Detail)"
-        }
+# ══════════════════════ 8) PYTHON DEPS (venv) ══════════════════════
+# ตรวจว่า venv ของ Hermes import ครบไหม — กันเหตุการณ์ pydantic หายแล้ว bot เงียบ
+# (heartbeat ยังสด แต่ทุกข้อความล้มตอน init agent — เจอจริง 14 ส.ค. 69: bot รัน pip install
+#  แล้วโดนตัดกลางคัน -> pydantic หาย -> openai import ไม่ได้)
+$VENV_PY = 'C:\Users\suras\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe'
+if (Test-Path $VENV_PY) {
+    $depJob = Start-Job -ScriptBlock {
+        param($py)
+        & $py -c "import pydantic, pydantic.fields; from openai import OpenAI; print('OK', pydantic.VERSION)" 2>&1 | Out-String
+    } -ArgumentList $VENV_PY
+    $depOut = ''
+    if (Wait-Job $depJob -Timeout 25) {
+        $depOut = (Receive-Job $depJob)
+    } else {
+        Stop-Job $depJob -ErrorAction SilentlyContinue
     }
-    # exit code ยังเหมือนเดิม (0 = OK / 2 = WARN / 1 = CRIT) — ให้ fallback-watch ใช้ตัดสินใจ
-    if ($nCrit -gt 0) { exit 1 } elseif ($nWarn -gt 0) { exit 2 } else { exit 0 }
+    Remove-Job $depJob -Force -ErrorAction SilentlyContinue
+    if ($depOut -match 'OK') {
+        $ver = if ($depOut -match 'OK (\d+\.\d+)') { $Matches[1] } else { '?' }
+        Add-Check 'Python deps' 'OK' ("venv import ครบ (pydantic {0}, openai OK)" -f $ver)
+    } else {
+        $hint = 'ซ่อม: uv pip install --python "' + $VENV_PY + '" "pydantic==2.13.4" แล้ว restart gateway'
+        Add-Check 'Python deps' 'CRIT' "venv พัง (pydantic/openai import ไม่ได้) — $hint"
+    }
+} else {
+    Add-Check 'Python deps' 'INFO' 'ไม่พบ venv python.exe'
 }
 
+# ══════════════════════ REPORT ══════════════════════
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host "  🧪 HEALTH CHECK — Hermes Gateway System" -ForegroundColor Cyan
@@ -277,8 +248,16 @@ Write-Host ("  " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cy
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
-foreach ($entry in $reportLines) {
-    Write-Host $entry.Line -ForegroundColor $entry.Color
+$nCrit = 0; $nWarn = 0
+$reportLines = New-Object System.Collections.Generic.List[string]
+foreach ($r in $script:results) {
+    if ($r.Status -eq 'CRIT') { $nCrit++ }
+    if ($r.Status -eq 'WARN') { $nWarn++ }
+    $icon  = Get-Icon $r.Status
+    $color = Get-Color $r.Status
+    $line  = "{0} {1,-22} : {2}" -f $icon, $r.Name, $r.Detail
+    $reportLines.Add($line)
+    Write-Host $line -ForegroundColor $color
 }
 
 Write-Host ""
