@@ -90,14 +90,27 @@ if (Test-Path $hbPath) {
 }
 
 # ══════════════════════ 2) PROCESS ══════════════════════
-$gwProcs = @()
+# ใช้ tasklist แทน Get-CimInstance (ทำงานทุก context — รวม task scheduler)
+$gwPids = @()
 try {
-    $gwProcs = @(Get-CimInstance Win32_Process -Filter "Name='hermes.exe' OR Name='python.exe'" |
-                 Where-Object { $_.CommandLine -match 'hermes' -and $_.CommandLine -match 'gateway' })
+    $tl = & tasklist /FI "IMAGENAME eq hermes.exe" /FO CSV /NH 2>&1 | Out-String
+    foreach ($line in ($tl -split "`r?`n")) {
+        if ($line -match '"(\d+)"') { $gwPids += $Matches[1] }
+    }
+    $tl2 = & tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH 2>&1 | Out-String
+    foreach ($line in ($tl2 -split "`r?`n")) {
+        if ($line -match '"(\d+)"') {
+            $pid = $Matches[1]
+            # เช็คว่า process นี้เกี่ยวกับ hermes gateway (ผ่าน wmic)
+            $cmd = (& wmic process where "ProcessId=$pid" get CommandLine 2>&1 | Out-String)
+            if ($cmd -match 'hermes' -and $cmd -match 'gateway') { $gwPids += $pid }
+        }
+    }
 } catch { }
-if ($gwProcs.Count -gt 0) {
-    $pids = ($gwProcs | ForEach-Object { $_.ProcessId }) -join ', '
-    Add-Check 'Process' 'OK' "พบ gateway $($gwProcs.Count) process (pid: $pids)"
+$gwPids = $gwPids | Sort-Object -Unique
+if ($gwPids.Count -gt 0) {
+    $pids = $gwPids -join ', '
+    Add-Check 'Process' 'OK' "พบ gateway $($gwPids.Count) process (pid: $pids)"
 } else {
     Add-Check 'Process' 'CRIT' 'ไม่พบ hermes/python gateway process — gateway ไม่รัน!'
 }
