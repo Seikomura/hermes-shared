@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   ตรวจ logs\agent.log หาเหตุการณ์ "Fallback activated: X → Y" ทุกชั้น
-  (openrouter → nous → gemini — API เท่านั้น) แล้วส่งแจ้งเตือนไป Telegram
+  (gemini → gemma → nous) แล้วส่งแจ้งเตือนไป Telegram
 
   แจ้งแบบ cooldown (กันสแปม): แจ้งครั้งเดียว แล้วเงียบภายในระยะเวลา
   ที่กำหนด (ค่าเริ่มต้น 60 นาที) — ถ้า Gemini quota หมดทั้งวัน จะได้
@@ -35,12 +35,8 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-# ── ค่าคงที่ของระบบ (auto-detect — env -> C:\AI Factory -> C:\AI_FACTORY\shared\hermes_home) ──
-if ($env:HERMES_HOME -and (Test-Path $env:HERMES_HOME)) { $HERMES_HOME = $env:HERMES_HOME }
-elseif (Test-Path 'C:\AI Factory')                       { $HERMES_HOME = 'C:\AI Factory' }
-elseif (Test-Path 'C:\AI_FACTORY\shared\hermes_home')    { $HERMES_HOME = 'C:\AI_FACTORY\shared\hermes_home' }
-else                                                     { $HERMES_HOME = 'C:\AI Factory' }
-
+# ── ค่าคงที่ของระบบ ──────────────────────────────────────────────
+$HERMES_HOME = 'C:\AI Factory'
 $LOG_FILE    = Join-Path $HERMES_HOME 'logs\agent.log'
 $STATE_FILE  = Join-Path $HERMES_HOME 'state\fallback-watch.offset'
 $LAST_FILE   = Join-Path $HERMES_HOME 'state\fallback-watch.last'
@@ -102,9 +98,9 @@ $found = @()
 if ($TestSend) {
     $found = @(
         '[TEST] Fallback activated: nvidia/nemotron-3-super-120b-a12b:free → gemini-3.6-flash (gemini)',
-        '[TEST] Fallback activated: gemini-3.6-flash → upstage/solar-pro4:free (nous)',
-        '[TEST] Fallback activated: upstage/solar-pro4:free → tencent/hy3:free (nous)',
-        '[TEST] Fallback activated: tencent/hy3:free → gemini-3.6-flash (gemini)'
+        '[TEST] Fallback activated: gemini-3.6-flash → google/gemma-4-31b-it:free (openrouter)',
+        '[TEST] Fallback activated: google/gemma-4-31b-it:free → upstage/solar-pro4:free (nous)',
+
     )
 } elseif ($newText) {
     $found = @($newText -split "`r?`n" | Where-Object { $_ -match $FALLBACK_PATTERN })
@@ -180,8 +176,7 @@ foreach ($line in $newFound) {
     # ตัด prefix ออก เหลือ "X → Y" (ตัด (provider) ท้ายด้วย)
     $step = ($line -as [string]) -replace '^.*?Fallback activated:\s*', ''
     $step = $step -replace '\s*\((openrouter|custom|gemini|nous)\)\s*$', ''
-    $layer = if ($step -match 'solar-pro4') { ' (Nous)' }
-             elseif ($step -match 'gemini') { ' (Gemini)' } else { '' }
+    $layer = if ($step -match 'solar-pro4') { ' (Nous)' } else { '' }
     $chainLines.Add("  $i. $step$layer")
 }
 $chainLines.Add('')
@@ -190,28 +185,6 @@ $chainLines.Add('')
 $chainLines.Add("(แจ้งครั้งเดียวต่อ $CooldownMinutes นาที — ไม่สแปม ถ้าตกต่อเนื่อง)")
 
 $body = $chainLines -join "`n"
-
-# ── 4.5) แนบ Health Check ย่อ (เฉพาะ CRIT/WARN) — ระบบเปลี่ยนโมเดล = อยากรู้สถานะรวมด้วย ──
-# เรียก health-check.ps1 -Compact (read-only — ไม่แตะ gateway) แล้วเอาเฉพาะบรรทัด CRIT/WARN แนบท้าย
-# ถ้าทุกอย่าง OK จะไม่แนบ (กันข้อความรก) — timeout 45 วิ กัน hermes ค้างแล้ว alert ค้างตาม
-$hcScript = Join-Path $HERMES_HOME 'health-check.ps1'
-if (Test-Path $hcScript) {
-    $hcOut = ''
-    $hcJob = Start-Job -ScriptBlock {
-        param($script)
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Compact 2>&1
-    } -ArgumentList $hcScript
-    if (Wait-Job $hcJob -Timeout 45) {
-        $hcOut = (Receive-Job $hcJob | Out-String).Trim()
-    } else {
-        Stop-Job $hcJob -ErrorAction SilentlyContinue
-    }
-    Remove-Job $hcJob -Force -ErrorAction SilentlyContinue
-
-    if ($hcOut) {
-        $body += "`n`n🧪 สถานะระบบ (Health Check):`n" + ($hcOut -split "`r?`n" | ForEach-Object { "  $_" }) -join "`n"
-    }
-}
 
 # ── 5) ส่งแจ้งเตือนผ่าน Telegram Bot API (JSON UTF-8) ─────────────
 $sent = $false

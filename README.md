@@ -30,13 +30,9 @@ hermes-shared/
 ├── scripts/                        # สคริปต์ ops (ลงเครื่องด้วย -Scripts)
 │   ├── install-tasks.ps1           #   ⭐ ลง Task Scheduler ทั้งชุด (idempotent — ข้ามตัวที่มีอยู่)
 │   ├── gateway-watch.ps1           #   watchdog gateway (HermesGatewayWatch + HermesGatewayLogonKick)
-│   ├── lmstudio-watch.ps1          #   watchdog LM Studio (LMStudioWatch — ลงเฉพาะเครื่องที่มี LM Studio)
-│   ├── lmstudio-start.ps1          #   autostart LM Studio headless
 │   ├── health-check.ps1            #   ตรวจสุขภาพทุก 30 นาที → แจ้ง Telegram
 │   ├── fallback-watch.ps1          #   แจ้งเตือนเมื่อ fallback เปลี่ยนชั้น
 │   ├── model-health-check.py       #   ตรวจโมเดล orchestration 8 ตัว (availability + latency)
-│   ├── home-use-work-local.ps1     #   เครื่องบ้าน: ชี้ local fallback ไป LM Studio เครื่องทำงาน
-│   ├── setup-home-machine.ps1      #   เครื่องบ้าน: ตั้งครบชุด (Nous + LM Studio port)
 │   ├── hidden-runner.vbs           #   รัน .ps1 แบบไร้หน้าต่าง (กัน terminal เด้ง)
 │   ├── check-secrets.ps1           #   สแกน secret ก่อน commit (กัน key หลุด)
 │   └── install-*.ps1               #   (ตัวเก่า) ลง task ทีละตัว
@@ -67,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File sync.ps1 -Scripts   # + ลงสคร
 | Flag | ความหมาย |
 |---|---|
 | `-SkipPull` | ข้าม `git pull` (offline / เพิ่ง push เอง) |
-| `-Scripts` | ลงสคริปต์ใน `scripts\` ไปที่ `HERMES_HOME` + **รัน `install-tasks.ps1` ลง Task Scheduler** (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว, ข้าม LMStudioWatch ถ้าเครื่องไม่มี LM Studio) |
+| `-Scripts` | ลงสคริปต์ใน `scripts\` ไปที่ `HERMES_HOME` + **รัน `install-tasks.ps1` ลง Task Scheduler** (watchdog/health-check/fallback — ข้ามตัวที่มีอยู่แล้ว) |
 | `-Import` | **ฉุกเฉิน** — เอา�สกิลที่แก้มือที่ `HERMES_HOME\skills\` กลับเข้า repo (แล้ว commit+push เอง) |
 | `-HERMES_HOME 'C:\...'` | ถ้าเครื่องนี้เก็บ config ที่อื่น (default: `C:\AI Factory`) |
 
@@ -133,7 +129,6 @@ Hermes ตั้งเป็น **agent orchestration**: primary = **Nemotron 3 
 | 7 | `google/gemma-4-26b-a4b-it:free` | native function calling |
 | 8-10 | Nous ฟรี ×3 (`upstage/solar-pro4:free` → `tencent/hy3:free` → `stepfun/step-3.7-flash:free`) | 524K / 295B / multimodal |
 | 11 | `gemini-3.6-flash` (gemini) | AI Studio — ต้องมี `GEMINI_API_KEY` |
-| 12-13 | LM Studio (`qwen/qwen3.5-9b` → `qwen/qwen3-1.7b`) | local สำรอง (ต่อเครื่อง) |
 
 **เครื่องทำงานเอาไปใช้ยังไง (~1 นาที):**
 
@@ -142,8 +137,6 @@ Hermes ตั้งเป็น **agent orchestration**: primary = **Nemotron 3 
 copy C:\AI Factory\config.yaml C:\AI Factory\config.yaml.bak-<วันนี้>
 # 2) คัดลอก template ไปทับ (ไม่มี secret — key อยู่ใน .env)
 copy config.orchestration.example.yaml C:\AI Factory\config.yaml
-# 3) เปิด config.yaml แล้วปรับชั้น LM Studio ท้ายสุด (⑬⑭) + custom_providers
-#    ให้เป็นของเครื่องตัวเอง (เครื่องทำงาน: qwen/qwen3.5-9b @ 127.0.0.1:1234 — ดูคอมเมนต์ในไฟล์)
 # 4) รีสตาร์ท gateway ผ่าน task ของเครื่อง
 # 5) ตรวจ
 hermes fallback list
